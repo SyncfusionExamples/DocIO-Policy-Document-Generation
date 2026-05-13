@@ -1,0 +1,802 @@
+﻿@{
+    ViewData["Title"] = "Policy Document Generation";
+}
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+        background: #f0f4f8;
+        min-height: 100vh;
+        padding: 20px;
+    }
+
+    .page-wrapper {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding: 40px 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 20px;
+        color: white;
+        box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+    }
+
+        .page-header h1 {
+            font-size: 42px;
+            font-weight: 800;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .page-header p {
+            font-size: 18px;
+            opacity: 0.95;
+            max-width: 700px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .page-header .badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.25);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+    .content-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 30px;
+    }
+
+    .card {
+        background: white;
+        border-radius: 16px;
+        padding: 30px;
+        box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+    }
+
+        .card:hover {
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+            transform: translateY(-2px);
+        }
+
+    .card-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+        .card-title .icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+    .upload-zone {
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 40px 20px;
+        text-align: center;
+        background: #f8fafc;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+
+        .upload-zone:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .upload-zone.has-file {
+            border-color: #10b981;
+            border-style: solid;
+            background: #ecfdf5;
+        }
+
+        .upload-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+    .upload-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+    }
+
+    .upload-text {
+        font-size: 15px;
+        color: #475569;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .upload-hint {
+        font-size: 13px;
+        color: #94a3b8;
+    }
+
+    .file-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #10b981;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-top: 15px;
+    }
+
+        .file-badge button {
+            background: rgba(255, 255, 255, 0.3);
+            border: none;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            transition: all 0.2s;
+        }
+
+            .file-badge button:hover {
+                background: rgba(255, 255, 255, 0.5);
+            }
+
+    .default-badge {
+        display: inline-block;
+        background: #fef3c7;
+        color: #92400e;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 10px;
+    }
+
+    .options-card {
+        grid-column: 1 / -1;
+    }
+
+    .options-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+    }
+
+    .option-box {
+        background: #f8fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        transition: all 0.3s ease;
+    }
+
+        .option-box:hover {
+            border-color: #cbd5e1;
+        }
+
+    .option-label {
+        font-size: 14px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 12px;
+        display: block;
+    }
+
+    .radio-group, .checkbox-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .radio-item, .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .radio-item:hover, .checkbox-item:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .radio-item input, .checkbox-item input {
+            width: 18px;
+            height: 18px;
+            accent-color: #667eea;
+            cursor: pointer;
+        }
+
+        .radio-item:has(input:checked), .checkbox-item:has(input:checked) {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+    .item-content {
+        flex: 1;
+    }
+
+    .item-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 2px;
+    }
+
+    .item-desc {
+        font-size: 12px;
+        color: #64748b;
+    }
+
+    .select-box {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+        .select-box:hover, .select-box:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+
+    .checkbox-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .action-section {
+        background: white;
+        border-radius: 16px;
+        padding: 30px;
+        box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+        text-align: center;
+    }
+
+    .generate-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 18px 50px;
+        font-size: 18px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        .generate-btn:active {
+            transform: translateY(0);
+        }
+
+    .info-section {
+        background: white;
+        border-radius: 16px;
+        padding: 30px;
+        box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+        margin-top: 30px;
+    }
+
+    .info-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    .features {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+    }
+
+    .feature {
+        text-align: center;
+        padding: 20px;
+    }
+
+    .feature-icon {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #f0f4ff 0%, #e9d5ff 100%);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        margin: 0 auto 12px;
+    }
+
+    .feature h4 {
+        font-size: 15px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 6px;
+    }
+
+    .feature p {
+        font-size: 13px;
+        color: #64748b;
+        line-height: 1.5;
+    }
+
+    .error-message {
+        background: #fee2e2;
+        border: 2px solid #fecaca;
+        color: #dc2626;
+        padding: 15px 20px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        margin-top: 20px;
+        display: none;
+    }
+
+        .error-message:not(:empty) {
+            display: block;
+        }
+
+    @@media (max-width: 1024px) {
+        .content-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .options-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .features {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .page-header h1 {
+            font-size: 32px;
+        }
+
+        .checkbox-list {
+            grid-template-columns: 1fr;
+        }
+
+        .features {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="page-wrapper">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="badge">🛡️ InsureDoc Platform</div>
+        <h1>Policy Document Generator</h1>
+        <p>Automate policy schedules, endorsements, certificates, and claims documentation with intelligent mail merge</p>
+    </div>
+
+    @using (Html.BeginForm("GenerateDocument", "Home", FormMethod.Post, new { enctype = "multipart/form-data" }))
+    {
+        @Html.AntiForgeryToken()
+
+        <!-- File Upload Section -->
+        <div class="content-grid">
+            <!-- Template Upload -->
+            <div class="card">
+                <div class="card-title">
+                    <div class="icon">📄</div>
+                    Policy Template
+                </div>
+                <div class="upload-zone" id="template-zone">
+                    <div class="upload-icon">📋</div>
+                    <div class="upload-text">Click to upload template</div>
+                    <div class="upload-hint">Word document (.docx) with merge fields</div>
+                    @Html.TextBox("templateFile", null, new { type = "file", accept = ".docx", onchange = "handleUpload(this, 'template')" })
+                    <div class="file-badge" id="template-badge" style="display: none;">
+                        ✓ <span id="template-name"></span>
+                        <button type="button" onclick="clearFile('template')">×</button>
+                    </div>
+                </div>
+                <div class="default-badge">⚡ Default template will be used if not uploaded</div>
+            </div>
+
+            <!-- Excel Data Upload -->
+            <div class="card">
+                <div class="card-title">
+                    <div class="icon">📊</div>
+                    Excel Data File
+                </div>
+                <div class="upload-zone" id="excelFile-zone">
+                    <div class="upload-icon">📈</div>
+                    <div class="upload-text">Click to upload Excel data</div>
+                    <div class="upload-hint">Excel workbook (.xlsx) with policy data</div>
+                    @Html.TextBox("excelDataFile", null, new { type = "file", accept = ".xlsx,.xls", onchange = "handleUpload(this, 'excelFile')" })
+                    <div class="file-badge" id="excelFile-badge" style="display: none;">
+                        ✓ <span id="excelFile-name"></span>
+                        <button type="button" onclick="clearFile('excelFile')">×</button>
+                    </div>
+                </div>
+                <div class="default-badge">⚡ Default sample data will be used if not uploaded</div>
+            </div>
+        </div>
+
+        <!-- Policy Selection Section -->
+        <div class="card options-card">
+            <div class="card-title">
+                <div class="icon">🔍</div>
+                Policy Selection
+            </div>
+
+            <div class="options-grid" style="grid-template-columns: 1fr 2fr;">
+                <!-- Selection Mode -->
+                <div class="option-box">
+                    <label class="option-label">Selection Mode</label>
+                    <div class="radio-group">
+                        <label class="radio-item">
+                            <input type="radio" name="selectionMode" value="specific" checked onchange="togglePolicyInput()" />
+                            <div class="item-content">
+                                <div class="item-title">🎯 Specific Policies</div>
+                                <div class="item-desc">Enter policy numbers</div>
+                            </div>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="selectionMode" value="all" onchange="togglePolicyInput()" />
+                            <div class="item-content">
+                                <div class="item-title">📋 All Policies</div>
+                                <div class="item-desc">Generate for all records</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Policy Numbers Input -->
+                <div class="option-box" id="policy-input-section">
+                    <label class="option-label">Policy Number(s)</label>
+                    <textarea name="policyNumbers"
+                          id="policyNumbers"
+                          class="select-box"
+                          rows="4"
+                          placeholder="Enter policy numbers (one per line)&#10;Example:&#10;POL001&#10;POL002&#10;POL003"
+                          style="resize: vertical; font-family: monospace; padding: 15px;"></textarea>
+                    <div class="item-desc" style="margin-top: 10px; padding: 0 10px; display: flex; align-items: center; gap: 8px;">
+                        <span style="color: #667eea;">💡</span>
+                        <span>Enter one policy number per line or comma-separated (e.g., POL001, POL002, POL003)</span>
+                    </div>
+                    <div id="policy-count" style="margin-top: 8px; padding: 8px 12px; background: #f0f4ff; border-radius: 8px; font-size: 13px; font-weight: 600; color: #667eea; display: none;">
+                        <span id="count-text"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Options Section -->
+        <div class="card options-card">
+            <div class="card-title">
+                <div class="icon">⚙️</div>
+                Generation Options
+            </div>
+
+            <div class="options-grid">
+                <!-- Output Format -->
+                <div class="option-box">
+                    <label class="option-label">Output Format</label>
+                    <div class="radio-group">
+                        <label class="radio-item">
+                            <input type="radio" name="outputFormat" value="docx" checked />
+                            <div class="item-content">
+                                <div class="item-title">📝 DOCX</div>
+                                <div class="item-desc">Editable document</div>
+                            </div>
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="outputFormat" value="pdf" />
+                            <div class="item-content">
+                                <div class="item-title">📑 PDF</div>
+                                <div class="item-desc">Distribution ready</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Additional Document -->
+                <div class="option-box">
+                    <label class="option-label">Additional Document</label>
+                    <select name="documentType" id="documentType" class="select-box" onchange="toggleAdditionalDocUploads()">
+                        <option value="">None - Main policy only</option>
+                        <option value="claims-letter">📧 Claims Letter</option>
+                        <option value="endorsement">📜 Endorsement</option>
+                        <option value="certificate">🏆 Certificate of Insurance</option>
+                        <option value="renewal-notice">🔔 Renewal Notice</option>
+                    </select>
+                    <div class="item-desc" style="margin-top: 10px; padding: 0 10px;">
+                        Select to generate additional document along with main policy
+                    </div>
+                </div>
+
+                <!-- Extra Options -->
+                <!-- Extra Options -->
+                <div class="option-box">
+                    <label class="option-label">Extra Features</label>
+                    <div class="checkbox-list">
+                        <label class="checkbox-item">
+                            <input type="hidden" name="multiPartDocument" value="false" />
+                            <input type="checkbox" name="multiPartDocument" value="true" />
+                            <div class="item-content">
+                                <div class="item-title">📑 Multi-part Document</div>
+                                <div class="item-desc">Add cover page & table of contents</div>
+                            </div>
+                        </label>
+                        <label class="checkbox-item">
+                            <input type="hidden" name="generateSeparateFiles" value="false" />
+                            <input type="checkbox" name="generateSeparateFiles" value="true" />
+                            <div class="item-content">
+                                <div class="item-title">📂 Separate Files</div>
+                                <div class="item-desc">Generate individual files per policy</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+               
+            </div>
+        </div>
+
+        <!-- Additional Document Data Uploads (shown only when a doc type is selected) -->
+        <div class="card options-card" id="additional-doc-uploads" style="display: none;">
+            <div class="card-title">
+                <div class="icon">📎</div>
+                Additional Document Sources
+                <span style="font-size:13px; font-weight:500; color:#64748b; margin-left:8px;">
+                    — leave blank to auto-use the same Excel data
+                </span>
+            </div>
+
+            <div class="content-grid" style="margin-bottom: 0;">
+                <!-- Custom Additional Template -->
+                <div>
+                    <div class="upload-zone" id="addTemplate-zone">
+                        <div class="upload-icon">📝</div>
+                        <div class="upload-text">Custom Additional Template <span style="color:#94a3b8; font-weight:400;">(optional)</span></div>
+                        <div class="upload-hint">Override the built-in template for the selected document type</div>
+                        @Html.TextBox("additionalDocTemplateFile", null, new { type = "file", accept = ".docx", onchange = "handleUpload(this, 'addTemplate')" })
+                        <div class="file-badge" id="addTemplate-badge" style="display: none;">
+                            ✓ <span id="addTemplate-name"></span>
+                            <button type="button" onclick="clearFile('addTemplate')">×</button>
+                        </div>
+                    </div>
+                    <div class="default-badge">⚡ Built-in template will be used if not uploaded</div>
+                </div>
+
+                <!-- Separate Additional Data Excel -->
+                <div>
+                    <div class="upload-zone" id="addExcel-zone">
+                        <div class="upload-icon">📊</div>
+                        <div class="upload-text">Separate Data for Additional Doc <span style="color:#94a3b8; font-weight:400;">(optional)</span></div>
+                        <div class="upload-hint">Excel with a sheet matching the additional template's group name</div>
+                        @Html.TextBox("additionalDocExcelFile", null, new { type = "file", accept = ".xlsx,.xls", onchange = "handleUpload(this, 'addExcel')" })
+                        <div class="file-badge" id="addExcel-badge" style="display: none;">
+                            ✓ <span id="addExcel-name"></span>
+                            <button type="button" onclick="clearFile('addExcel')">×</button>
+                        </div>
+                    </div>
+                    <div class="default-badge">⚡ Same Excel used if not uploaded — sheet name must match template group</div>
+                </div>
+            </div>
+
+            <!-- How it works hint -->
+            <div style="margin-top: 20px; padding: 15px 18px; background: #f0f4ff; border-radius: 10px; border-left: 4px solid #667eea;">
+                <div style="font-size:13px; font-weight:700; color:#3730a3; margin-bottom:6px;">💡 How additional document data works</div>
+                <ul style="font-size:13px; color:#4338ca; line-height:1.8; padding-left:18px;">
+                    <li><strong>Same Excel (default):</strong> Add a sheet whose name matches the <code>«TableStart:SheetName»</code> group in your additional template. The same PolicyNumber column links the data automatically.</li>
+                    <li><strong>Separate Excel:</strong> Upload a dedicated Excel above. Its first column must be PolicyNumber to filter per-policy correctly.</li>
+                    <li><strong>Custom template:</strong> Upload your own <code>.docx</code> with any merge fields — both options above apply.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Generate Button -->
+        <div class="action-section">
+            <button type="submit" class="generate-btn">
+                <span>🚀</span>
+                <span>Generate Documents</span>
+            </button>
+            <div class="error-message">@ViewBag.Message</div>
+        </div>
+    }
+
+    <!-- Features Section -->
+    <div class="info-section">
+        <div class="info-title">Platform Capabilities</div>
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🔄</div>
+                <h4>Mail Merge</h4>
+                <p>Automated field population from JSON data</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">📦</div>
+                <h4>Batch Generation</h4>
+                <p>Create multiple document types at once</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">⚡</div>
+                <h4>Fast Processing</h4>
+                <p>Real-time document generation</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🎨</div>
+                <h4>Flexible Templates</h4>
+                <p>Use custom or default templates</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Handle file uploads
+        function handleUpload(input, type) {
+            const zone = document.getElementById(type + '-zone');
+            const badge = document.getElementById(type + '-badge');
+            const nameSpan = document.getElementById(type + '-name');
+
+            if (input.files && input.files[0]) {
+                nameSpan.textContent = input.files[0].name;
+                badge.style.display = 'inline-flex';
+                zone.classList.add('has-file');
+            }
+        }
+
+        // Clear uploaded file
+        function clearFile(type) {
+            const nameMap = {
+                'template':    'templateFile',
+                'excelFile':   'excelDataFile',
+                'addTemplate': 'additionalDocTemplateFile',
+                'addExcel':    'additionalDocExcelFile'
+            };
+            const inputName = nameMap[type] || type;
+            const input = document.querySelector('input[name="' + inputName + '"]');
+            const zone = document.getElementById(type + '-zone');
+            const badge = document.getElementById(type + '-badge');
+
+            if (input)  input.value = '';
+            if (badge)  badge.style.display = 'none';
+            if (zone)   zone.classList.remove('has-file');
+        }
+
+        // Show/hide additional document upload panel based on selected doc type
+        function toggleAdditionalDocUploads() {
+            const docType = document.getElementById('documentType').value;
+            const panel   = document.getElementById('additional-doc-uploads');
+            panel.style.display = docType ? 'block' : 'none';
+        }
+
+        // Toggle policy input visibility based on selection mode
+        function togglePolicyInput() {
+            const selectionMode = document.querySelector('input[name="selectionMode"]:checked').value;
+            const policyInputSection = document.getElementById('policy-input-section');
+            const policyTextarea = document.getElementById('policyNumbers');
+
+            if (selectionMode === 'all') {
+                policyInputSection.style.opacity = '0.5';
+                policyInputSection.style.pointerEvents = 'none';
+                policyTextarea.value = '';
+                policyTextarea.disabled = true;
+                document.getElementById('policy-count').style.display = 'none';
+            } else {
+                policyInputSection.style.opacity = '1';
+                policyInputSection.style.pointerEvents = 'auto';
+                policyTextarea.disabled = false;
+            }
+        }
+
+        // Count and display policy numbers as user types
+        document.getElementById('policyNumbers').addEventListener('input', function() {
+            const text = this.value.trim();
+            if (!text) {
+                document.getElementById('policy-count').style.display = 'none';
+                return;
+            }
+
+            // Split by newlines or commas and filter empty entries
+            const policies = text.split(/[\n,]+/).map(p => p.trim()).filter(p => p.length > 0);
+            const count = policies.length;
+
+            const countDisplay = document.getElementById('policy-count');
+            const countText = document.getElementById('count-text');
+
+            if (count > 0) {
+                countText.textContent = `${count} ${count === 1 ? 'policy' : 'policies'} will be processed`;
+                countDisplay.style.display = 'block';
+            } else {
+                countDisplay.style.display = 'none';
+            }
+        });
+
+        // Validate form before submission
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const excelFile = document.querySelector('input[name="excelDataFile"]');
+            const selectionMode = document.querySelector('input[name="selectionMode"]:checked').value;
+            const policyNumbers = document.getElementById('policyNumbers').value.trim();
+            const errorDiv = document.querySelector('.error-message');
+
+            // Check if Excel file is uploaded
+            if (!excelFile.files || excelFile.files.length === 0) {
+                e.preventDefault();
+                errorDiv.textContent = '⚠️ Please upload an Excel data file';
+                errorDiv.style.display = 'block';
+                document.getElementById('excelFile-zone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            // Check if policy numbers are entered in specific mode
+            if (selectionMode === 'specific' && !policyNumbers) {
+                e.preventDefault();
+                errorDiv.textContent = '⚠️ Please enter at least one policy number or select "All Policies" mode';
+                errorDiv.style.display = 'block';
+                document.getElementById('policy-input-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
+            errorDiv.style.display = 'none';
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            togglePolicyInput();
+        });
+    </script>
+}

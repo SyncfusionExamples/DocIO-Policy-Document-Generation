@@ -1,0 +1,124 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Policy_Document_Generation</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/Policy_Document_Generation.styles.css" asp-append-version="true" />
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+            <div class="container-fluid">
+                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">Policy_Document_Generation</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                        aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                    <ul class="navbar-nav flex-grow-1">
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+    <div class="container">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <footer class="app-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h5>Property Agreement Generator</h5>
+            </div>
+
+            <div class="footer-links">
+                <a asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+                <span class="separator">•</span>
+                <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy Policy</a>
+            </div>
+        </div>
+    </footer>
+
+    <style>
+        .app-footer {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #8b5cf6 100%);
+            color: white;
+            margin-top: 60px;
+            padding: 40px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .footer-content {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .footer-section h5 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: white;
+        }
+
+        .footer-section p {
+            font-size: 13px;
+            opacity: 0.9;
+            margin: 0;
+        }
+
+        .footer-links {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 14px;
+        }
+
+            .footer-links a {
+                color: white;
+                text-decoration: none;
+                font-weight: 500;
+                transition: all 0.3s ease;
+                opacity: 0.95;
+            }
+
+                .footer-links a:hover {
+                    opacity: 1;
+                    text-decoration: underline;
+                }
+
+            .footer-links .separator {
+                opacity: 0.6;
+            }
+
+        .footer-links {
+            justify-content: center;
+        }
+
+        .app-footer {
+            padding: 30px 20px;
+            margin-top: 40px;
+        }
+
+        }
+    </style>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

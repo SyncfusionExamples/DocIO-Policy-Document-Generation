@@ -1,0 +1,261 @@
+﻿@{
+    ViewData["Title"] = "Privacy Policy";
+}
+
+<style>
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+    }
+
+    .privacy-container {
+        max-width: 900px;
+        margin: 50px auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        padding: 50px;
+    }
+
+    .privacy-header {
+        text-align: center;
+        margin-bottom: 40px;
+        padding-bottom: 25px;
+        border-bottom: 3px solid #667eea;
+    }
+
+        .privacy-header h1 {
+            color: #0f172a;
+            font-size: 38px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .privacy-header p {
+            color: #64748b;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+    .privacy-section {
+        margin-bottom: 35px;
+    }
+
+        .privacy-section h2 {
+            color: #667eea;
+            font-size: 26px;
+            font-weight: 600;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .privacy-section h3 {
+            color: #334155;
+            font-size: 20px;
+            font-weight: 600;
+            margin-top: 20px;
+            margin-bottom: 12px;
+        }
+
+        .privacy-section p {
+            color: #475569;
+            line-height: 1.9;
+            margin-bottom: 16px;
+            text-align: justify;
+            font-size: 15px;
+        }
+
+        .privacy-section ul {
+            margin-left: 30px;
+            margin-bottom: 16px;
+        }
+
+        .privacy-section li {
+            color: #475569;
+            line-height: 1.9;
+            margin-bottom: 10px;
+            font-size: 15px;
+        }
+
+    .highlight-box {
+        background: #f0f4ff;
+        border-left: 5px solid #667eea;
+        padding: 25px;
+        margin: 30px 0;
+        border-radius: 8px;
+    }
+
+        .highlight-box h3 {
+            color: #4c1d95;
+            margin-bottom: 12px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .highlight-box p {
+            color: #5b21b6;
+            margin: 0;
+            font-weight: 500;
+            line-height: 1.8;
+        }
+
+        .highlight-box ul {
+            margin-top: 12px;
+            margin-bottom: 0;
+        }
+
+        .highlight-box li {
+            color: #5b21b6;
+        }
+
+    .warning-box {
+        background: #fef3c7;
+        border-left: 5px solid #f59e0b;
+        padding: 25px;
+        margin: 30px 0;
+        border-radius: 8px;
+    }
+
+        .warning-box h3 {
+            color: #92400e;
+            margin-bottom: 12px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .warning-box p {
+            color: #78350f;
+            margin: 0;
+            font-weight: 500;
+            line-height: 1.8;
+        }
+
+    .icon {
+        font-size: 26px;
+    }
+
+    .contact-section {
+        background: #f8fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 30px;
+        margin-top: 40px;
+        text-align: center;
+    }
+
+        .contact-section h3 {
+            color: #0f172a;
+            font-size: 22px;
+            margin-bottom: 15px;
+        }
+
+        .contact-section p {
+            color: #64748b;
+            margin-bottom: 20px;
+        }
+
+        .contact-section a {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background 0.3s ease;
+        }
+
+            .contact-section a:hover {
+                background: #5558d3;
+            }
+</style>
+
+<div class="privacy-container">
+    <div class="privacy-header">
+        <h1><span>📄</span> Privacy Policy</h1>
+        <p>Last Updated: May 6, 2026</p>
+    </div>
+
+    <div class="privacy-section">
+        <h2><span class="icon">📋</span> Introduction</h2>
+        <p>
+            Welcome to Property Agreement Generator. We understand the importance of protecting your personal information
+            when creating documents. This Privacy Policy explains how our application handles document templates and property data
+            during the agreement generation process.
+        </p>
+        <p>
+            Our application is designed as a document processing tool that helps users generate professional insurance policy agreements by
+            merging Word document templates with property information.
+        </p>
+    </div>
+
+    <div class="privacy-section">
+        <h2><span class="icon">🔒</span> Information We Process</h2>
+        <p>When you use our property agreement generation service, we temporarily process the following information:</p>
+
+        <h3>Document Templates</h3>
+        <ul>
+            <li>Word document templates (.doc, .docx, .dot, .dotx, .docm, .dotm)</li>
+            <li>Agreement templates containing merge fields for property details</li>
+        </ul>
+
+        <h3>Property Information Files</h3>
+        <ul>
+            <li>Excel files containing policy details and party information</li>
+            <li>Structured data including address, descriptions, terms, and party details</li>
+            <li>Multiple property records for batch processing</li>
+        </ul>
+
+        <h3>Generated Agreements</h3>
+        <ul>
+            <li>Merged PDF documents containing property-specific information</li>
+            <li>Single consolidated PDF agreements or multiple individual agreement PDFs</li>
+        </ul>
+    </div>
+
+    <div class="privacy-section">
+        <h2><span class="icon">⚙️</span> How We Process Your Data</h2>
+        <p>
+            Our application uses Syncfusion DocIO library to perform mail merge operations and document conversion.
+            The processing workflow is as follows:
+        </p>
+
+        <h3>Document Processing Steps:</h3>
+        <ul>
+            <li><strong>Upload:</strong> Your Word template and Excel data file are uploaded to the server's temporary memory</li>
+            <li><strong>Mail Merge:</strong> Syncfusion DocIO performs mail merge operations to populate template fields with property data</li>
+            <li><strong>Format Detection:</strong> The system automatically detects the appropriate merge format based on your data structure</li>
+            <li><strong>PDF Conversion:</strong> The merged document is converted to PDF format using Syncfusion DocIORenderer</li>
+            <li><strong>Output Generation:</strong> Based on your selection, either a single merged PDF or multiple individual PDFs are created</li>
+            <li><strong>Download:</strong> The generated PDF(s) are immediately sent to your browser for download</li>
+            <li><strong>Cleanup:</strong> All temporary files and data are immediately deleted from server memory</li>
+        </ul>
+    </div>
+
+    <div class="highlight-box">
+        <h2><span class="icon">🛡️</span> Data Security</h2>
+        <p>
+            All processing happens locally in your browser, and files <strong>never</strong>
+            go to any external server. Everything stays private and secure on your machine.
+        </p>
+    </div>
+
+    <div class="contact-section">
+        <h3>📧 Questions or Concerns?</h3>
+        <p>
+            If you have any questions about this Privacy Policy or how we handle document processing,
+            please contact us for support:
+        </p>
+        <a href="mailto:support@example.com">Contact Support</a>
+    </div>
+</div>
