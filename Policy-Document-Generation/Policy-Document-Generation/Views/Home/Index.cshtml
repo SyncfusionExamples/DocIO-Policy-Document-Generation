@@ -567,21 +567,18 @@
                 </div>
 
                 <!-- Extra Options -->
-                <!-- Extra Options -->
                 <div class="option-box">
                     <label class="option-label">Extra Features</label>
                     <div class="checkbox-list">
                         <label class="checkbox-item">
-                            <input type="hidden" name="multiPartDocument" value="false" />
-                            <input type="checkbox" name="multiPartDocument" value="true" />
+                            <input type="checkbox" id="multiPartDocument" name="multiPartDocument" />
                             <div class="item-content">
                                 <div class="item-title">📑 Multi-part Document</div>
                                 <div class="item-desc">Add cover page & table of contents</div>
                             </div>
                         </label>
                         <label class="checkbox-item">
-                            <input type="hidden" name="generateSeparateFiles" value="false" />
-                            <input type="checkbox" name="generateSeparateFiles" value="true" />
+                            <input type="checkbox" id="generateSeparateFiles" name="generateSeparateFiles" />
                             <div class="item-content">
                                 <div class="item-title">📂 Separate Files</div>
                                 <div class="item-desc">Generate individual files per policy</div>
@@ -798,5 +795,25 @@
         document.addEventListener('DOMContentLoaded', function() {
             togglePolicyInput();
         });
+
+        // Convert checkboxes to proper boolean values before form submission
+            document.querySelector('form').addEventListener('submit', function(e) {
+                // Handle checkboxes - set to "on" for checked, remove attribute for unchecked
+                const multiPartDoc = document.getElementById('multiPartDocument');
+                const separateFiles = document.getElementById('generateSeparateFiles');
+
+                // Ensure checkboxes have proper values
+                if (multiPartDoc.checked) {
+                    multiPartDoc.value = 'true';
+                } else {
+                    multiPartDoc.value = 'false';
+                }
+
+                if (separateFiles.checked) {
+                    separateFiles.value = 'true';
+                } else {
+                    separateFiles.value = 'false';
+                }
+            });
     </script>
 }

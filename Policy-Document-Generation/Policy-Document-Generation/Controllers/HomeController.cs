@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting.Internal;
 using Policy_Document_Generation.Models;
 using Syncfusion.DocIO;
 using Syncfusion.DocIO.DLS;
+using Syncfusion.Drawing;
 using Syncfusion.XlsIO;
 using System.Collections;
 using System.Data;
@@ -29,38 +30,51 @@ namespace Policy_Document_Generation.Controllers
         /// 3. Selective policies (specific policy numbers)
         /// 4. All policies (from Excel file)
         /// 
-        /// OPTIMIZATION: Excel is read only ONCE, DataSet is created once and reused.
+        /// Excel is read only ONCE, DataSet is created once and reused.
         /// For separate documents, uses merge-once-then-split strategy for better performance.
         /// </summary>
         public IActionResult GenerateDocument(ReportDataViewModel model)
         {
             try
             {
-                // Step 1: Get template and Excel streams
                 Stream documentStream = GetWordDocument(model.TemplateFile);
                 Stream excelStream = GetExcel(model.TemplateFile, model.ExcelDataFile);
 
-                // Step 2: Parse policy numbers based on selection mode
+                // Step 2: Parse policy numbers from user input (specific mode)
                 List<string> policyNumbersList = ParsePolicyNumbers(model);
 
-                // Step 3: If "all policies" mode is selected and separate files is requested,
-                // fetch all policy numbers from Excel file
-                if (model.SelectionMode == "all" && model.GenerateSeparateFiles)
+                // Step 3: Determine filtering strategy
+                bool needsFiltering = model.SelectionMode == "specific" && policyNumbersList.Count > 0;
+
+                // Step 4: Create DataSet (filter during read if specific policies selected)
+                DataSet dataSet = CreateMailMergeDataSet(excelStream, needsFiltering ? policyNumbersList : null);
+
+                if (dataSet.Tables.Count == 0 || dataSet.Tables[0].Rows.Count == 0)
                 {
-                    policyNumbersList = ExtractAllPolicyNumbersFromExcel(excelStream);
-                    excelStream.Position = 0; // Reset stream position after reading
+                    TempData["Error"] = "No data found in Excel file.";
+                    return RedirectToAction("Index");
                 }
 
-                // Step 4: Check if separate files should be generated for each policy
+                // Step 5: For "all with separate files" - extract policy numbers from DataTable
+                if (model.SelectionMode == "all" && model.GenerateSeparateFiles)
+                {
+                    // Extract from first column of first table (already in memory)
+                    policyNumbersList = dataSet.Tables[0].AsEnumerable()
+                        .Select(row => row[0]?.ToString()?.Trim())
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Distinct()
+                        .ToList();
+                }
+
+                // Step 6: Generate separate or single document
                 if (model.GenerateSeparateFiles && policyNumbersList.Count > 1)
                 {
-                    // Generate separate documents for each policy and return as ZIP
-                    return GenerateSeparateDocuments(documentStream, excelStream, policyNumbersList, model);
+                    // Pass the already-created DataSet, not excelStream
+                    return GenerateSeparateDocuments(documentStream, dataSet, excelStream, policyNumbersList, model);
                 }
                 else
                 {
-                    // Generate single document with all selected policies
-                    return GenerateSingleDocument(documentStream, excelStream, policyNumbersList, model);
+                    return GenerateSingleDocument(documentStream, dataSet, excelStream, policyNumbersList, model);
                 }
             }
             catch (Exception ex)
@@ -97,70 +111,16 @@ namespace Policy_Document_Generation.Controllers
             }
 
             return policyNumbers;
-        }
-
-        /// <summary>
-        /// Extracts all unique policy numbers from the first column of the Excel file
-        /// Used when "all policies" mode is selected with separate file generation
-        /// </summary>
-        private List<string> ExtractAllPolicyNumbersFromExcel(Stream excelStream)
-        {
-            List<string> policyNumbers = new List<string>();
-
-            try
-            {
-                using (ExcelEngine excelEngine = new ExcelEngine())
-                {
-                    IApplication application = excelEngine.Excel;
-                    application.DefaultVersion = ExcelVersion.Xlsx;
-
-                    IWorkbook workbook = application.Workbooks.Open(excelStream);
-                    
-                    // Get the first sheet (main data sheet)
-                    if (workbook.Worksheets.Count > 0)
-                    {
-                        IWorksheet sheet = workbook.Worksheets[0];
-                        
-                        if (sheet?.UsedRange != null && sheet.UsedRange.LastRow > 1)
-                        {
-                            int headerRow = sheet.UsedRange.Row;
-                            int lastRow = sheet.UsedRange.LastRow;
-
-                            // Extract all values from the first column (skip header)
-                            for (int row = headerRow + 1; row <= lastRow; row++)
-                            {
-                                string value = sheet[row, 1].Value?.ToString()?.Trim();
-                                
-                                // Add unique non-empty values
-                                if (!string.IsNullOrWhiteSpace(value) && !policyNumbers.Contains(value))
-                                {
-                                    policyNumbers.Add(value);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Error extracting policy numbers from Excel: {ex.Message}", ex);
-            }
-
-            return policyNumbers;
-        }
-
+        }       
         /// <summary>
         /// Generates a single document containing all selected policies.
         /// If an additional document type is selected, both are returned as a ZIP archive.
         /// Supports both DOCX and PDF output formats.
         /// </summary>
-        private IActionResult GenerateSingleDocument(Stream documentStream, Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
+        private IActionResult GenerateSingleDocument(Stream documentStream,DataSet dataSet, Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
         {
             try
             {
-                // Create DataSet from Excel with relations
-                DataSet dataSet = CreateMailMergeDataSet(excelStream, policyNumbers);
-
                 if (dataSet.Tables.Count == 0 || dataSet.Tables[0].Rows.Count == 0)
                 {
                     TempData["Error"] = "No data found for the selected policy numbers.";
@@ -190,7 +150,9 @@ namespace Policy_Document_Generation.Controllers
                 if (additionalTemplateStream != null)
                 {
                     DataSet additionalDataSet = GetAdditionalDocDataSet(model, excelStream, dataSet, policyNumbers);
-                    additionalDocBytes = GenerateDocumentBytes(additionalTemplateStream, additionalDataSet, model, isPdf);
+                    // Filter dataset to only include tables that have merge groups in the template
+                    DataSet filteredDataSet = FilterDataSetForTemplate(additionalTemplateStream, additionalDataSet);
+                    additionalDocBytes = GenerateDocumentBytes(additionalTemplateStream, filteredDataSet, model, isPdf);
                     additionalTemplateStream.Dispose();
                 }
 
@@ -367,7 +329,7 @@ namespace Policy_Document_Generation.Controllers
         /// 3. Splits the merged document by page breaks
         /// 4. Returns ZIP archive with separate files
         /// </summary>
-        private IActionResult GenerateSeparateDocuments(Stream documentStream, Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
+        private IActionResult GenerateSeparateDocuments(Stream documentStream, DataSet dataSet,Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
         {
             try
             {
@@ -375,22 +337,13 @@ namespace Policy_Document_Generation.Controllers
                 string fileExtension = isPdf ? "pdf" : "docx";
                 bool hasAdditionalDoc = !string.IsNullOrEmpty(model.DocumentType);
 
-                // Step 1: Create DataSet once - reads Excel only once
-                DataSet fullDataSet = CreateMailMergeDataSet(excelStream, policyNumbers);
-
-                if (fullDataSet.Tables.Count == 0)
-                {
-                    TempData["Error"] = "No data found for the selected policy numbers.";
-                    return RedirectToAction("Index");
-                }
-
                 using (MemoryStream zipStream = new MemoryStream())
                 {
                     using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create, true))
                     {
                         // Step 2: Generate main policy documents (merge once, split by page breaks)
                         byte[] mainDocsZip = GenerateDocumentsWithPageBreakSplit(
-                            documentStream, fullDataSet, policyNumbers, model, isPdf, fileExtension);
+                            documentStream, dataSet, policyNumbers, model, isPdf, fileExtension);
 
                         // Step 3: Add main documents to final ZIP
                         AddZipContentsToArchive(mainDocsZip, archive);
@@ -405,12 +358,13 @@ namespace Policy_Document_Generation.Controllers
                             {
                                 // Get DataSet for additional document (reuses main DataSet or loads separate Excel)
                                 excelStream.Position = 0;
-                                DataSet additionalDataSet = GetAdditionalDocDataSet(model, excelStream, fullDataSet, policyNumbers);
-
+                                DataSet additionalDataSet = GetAdditionalDocDataSet(model, excelStream, dataSet, policyNumbers);
+                                // Filter dataset to only include tables that have merge groups in the template
+                                DataSet filteredDataSet = FilterDataSetForTemplate(additionalTemplateStream, additionalDataSet);
                                 string additionalLabel = GetAdditionalDocumentLabel(model.DocumentType);
 
                                 byte[] additionalDocsZip = GenerateDocumentsWithPageBreakSplit(
-                                    additionalTemplateStream, additionalDataSet, policyNumbers, 
+                                    additionalTemplateStream, filteredDataSet, policyNumbers, 
                                     model, isPdf, fileExtension, additionalLabel);
 
                                 AddZipContentsToArchive(additionalDocsZip, archive);
@@ -452,14 +406,8 @@ namespace Policy_Document_Generation.Controllers
                 // Execute mail merge ONCE with all data
                 ExecuteMailMerge(document, dataSet);
 
-                // Add cover page if requested
-                if (model.MultiPartDocument)
-                {
-                    AddCoverPageAndTOC(document);
-                }
-
                 // Split the merged document by page breaks and return as ZIP
-                return SplitDocumentByPageBreaks(document, policyNumbers, isPdf, fileExtension, fileNameSuffix);
+                return SplitDocumentByPageBreaks(document, policyNumbers, isPdf, fileExtension, fileNameSuffix, model.MultiPartDocument);
             }
         }
 
@@ -473,7 +421,8 @@ namespace Policy_Document_Generation.Controllers
             List<string> policyNumbers,
             bool convertToPdf,
             string fileExtension,
-            string fileNameSuffix)
+            string fileNameSuffix,
+             bool addCoverPage = false)
         {
             // Step 1: Find all page breaks in the document
             List<Entity> pageBreaks = document.FindAllItemsByProperty(
@@ -539,6 +488,8 @@ namespace Policy_Document_Generation.Controllers
                             using (WordDocument extractedDoc = documentPart.GetAsWordDocument())
                             using (MemoryStream docStream = new MemoryStream())
                             {
+                                if(addCoverPage)
+                                    AddCoverPageAndTOC(extractedDoc);
                                 SaveDocumentToStream(extractedDoc, docStream, convertToPdf);
                                 docStream.Position = 0;
 
@@ -559,7 +510,44 @@ namespace Policy_Document_Generation.Controllers
                 return zipStream.ToArray();
             }
         }
+        /// <summary>
+        /// Filters the dataset to include only tables that match template merge groups.
+        /// Prevents mismatch between template groups and dataset tables.
+        /// </summary>
+        private DataSet FilterDataSetForTemplate(Stream templateStream, DataSet dataSet)
+        {
+            try
+            {
+                using (WordDocument tempDoc = new WordDocument(templateStream, FormatType.Docx))
+                {
+                    var mergeGroupNames = tempDoc.MailMerge.GetMergeGroupNames();
 
+                    if (mergeGroupNames == null || mergeGroupNames.Length == 0)
+                        return dataSet;
+
+                    // Create new filtered dataset
+                    DataSet filteredDataSet = new DataSet();
+
+                    // Add only tables that match merge groups
+                    foreach (string groupName in mergeGroupNames)
+                    {
+                        DataTable matchingTable = dataSet.Tables[groupName];
+                        if (matchingTable != null)
+                        {
+                            // Clone and add to filtered dataset
+                            filteredDataSet.Tables.Add(matchingTable.Copy());
+                        }
+                    }
+
+                    return filteredDataSet;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error filtering dataset for template. Using original dataset.");
+                return dataSet;
+            }
+        }
         /// <summary>
         /// Helper method: Extracts files from a ZIP byte array and adds them to target archive.
         /// Used to combine main documents and additional documents into a single ZIP.
@@ -608,17 +596,73 @@ namespace Policy_Document_Generation.Controllers
         {
             WSection firstSection = document.Sections[0].Clone();
             firstSection.Body.ChildEntities.Clear();
-            // Insert a new section at the beginning for cover page
             document.Sections.Insert(0, firstSection);
-            IWParagraph coverPara = firstSection.AddParagraph();
-            coverPara.ParagraphFormat.HorizontalAlignment = Syncfusion.DocIO.DLS.HorizontalAlignment.Center;
-            coverPara.AppendText("POLICY DOCUMENT").CharacterFormat.FontSize = 24;
-            coverPara.AppendBreak(BreakType.LineBreak);
-            coverPara.AppendBreak(BreakType.LineBreak);
-            coverPara.AppendText($"Generated on: {DateTime.Now:MMMM dd, yyyy}").CharacterFormat.FontSize = 12;
 
-            // Add page break after cover
-            coverPara.AppendBreak(BreakType.PageBreak);
+            // === TITLE ===
+            IWParagraph titlePara = firstSection.AddParagraph();
+            titlePara.ParagraphFormat.HorizontalAlignment = Syncfusion.DocIO.DLS.HorizontalAlignment.Center;
+            titlePara.ParagraphFormat.BeforeSpacing = 72; // ~1 inch top margin
+
+            IWTextRange titleText = titlePara.AppendText("POLICY DOCUMENT");
+            titleText.CharacterFormat.FontSize = 28;
+            titleText.CharacterFormat.Bold = true;
+            titleText.CharacterFormat.FontName = "Arial";
+
+            titlePara.AppendBreak(BreakType.LineBreak);
+
+            // === SUBTITLE ===
+            IWTextRange subtitleText = titlePara.AppendText("Insurance Coverage Summary");
+            subtitleText.CharacterFormat.FontSize = 14;
+            subtitleText.CharacterFormat.Italic = true;
+            subtitleText.CharacterFormat.TextColor = Color.FromArgb(68, 114, 196);
+
+            // === SPACING ===
+            firstSection.AddParagraph().AppendBreak(BreakType.LineBreak);
+            firstSection.AddParagraph().AppendBreak(BreakType.LineBreak);
+
+            // === DOCUMENT INFO ===
+            IWParagraph infoPara = firstSection.AddParagraph();
+            infoPara.ParagraphFormat.HorizontalAlignment = Syncfusion.DocIO.DLS.HorizontalAlignment.Center;
+
+            IWTextRange dateLabel = infoPara.AppendText("Generated Date: ");
+            dateLabel.CharacterFormat.FontSize = 12;
+            dateLabel.CharacterFormat.Bold = true;
+
+            IWTextRange dateValue = infoPara.AppendText($"{DateTime.Now:MMMM dd, yyyy}");
+            dateValue.CharacterFormat.FontSize = 12;
+
+            infoPara.AppendBreak(BreakType.LineBreak);
+
+            IWTextRange timeValue = infoPara.AppendText($"{DateTime.Now:hh:mm tt}");
+            timeValue.CharacterFormat.FontSize = 10;
+            timeValue.CharacterFormat.TextColor = Color.Gray;
+
+            // === SPACING ===
+            firstSection.AddParagraph().AppendBreak(BreakType.LineBreak);
+
+            // === DISCLAIMER ===
+            IWParagraph disclaimerPara = firstSection.AddParagraph();
+            disclaimerPara.ParagraphFormat.HorizontalAlignment = Syncfusion.DocIO.DLS.HorizontalAlignment.Center;
+            disclaimerPara.ParagraphFormat.LineSpacing = 14;
+
+            IWTextRange disclaimer = disclaimerPara.AppendText(
+                "This document contains confidential policy information.\n" +
+                "Please review all terms and conditions carefully.\n" +
+                "For questions, contact your insurance provider.");
+            disclaimer.CharacterFormat.FontSize = 10;
+            disclaimer.CharacterFormat.Italic = true;
+            disclaimer.CharacterFormat.TextColor = Color.FromArgb(89, 89, 89);
+
+            // === FOOTER LINE ===
+            firstSection.AddParagraph().AppendBreak(BreakType.LineBreak);
+
+            IWParagraph footerLine = firstSection.AddParagraph();
+            footerLine.ParagraphFormat.HorizontalAlignment = Syncfusion.DocIO.DLS.HorizontalAlignment.Center;
+
+            IWTextRange footer = footerLine.AppendText("_______________________________________");
+            footer.CharacterFormat.FontSize = 10;
+            footer.CharacterFormat.TextColor = Color.LightGray;
+
         }
 
         /// <summary>
@@ -641,13 +685,22 @@ namespace Policy_Document_Generation.Controllers
                 var tableStructure = AnalyzeExcelStructure(workbook);
 
                 // Step 2: Create DataTables from sheets
+                int tableIndex = 0;
                 foreach (var tableInfo in tableStructure)
                 {
-                    DataTable dt = ReadExcelSheetToDataTable(workbook, tableInfo.SheetName, policyNumbers);
+                    // Only apply filter to first table
+                    bool isFirstTable = (tableIndex == 0);
+                    DataTable dt = ReadExcelSheetToDataTable(
+                        workbook,
+                        tableInfo.SheetName,
+                        policyNumbers,
+                        isFirstTable: isFirstTable);
+
                     if (dt != null && dt.Rows.Count > 0)
                     {
                         dataSet.Tables.Add(dt);
                     }
+                    tableIndex++;
                 }
 
                 // Store table structure in DataSet extended properties for later use
@@ -660,7 +713,7 @@ namespace Policy_Document_Generation.Controllers
         /// <summary>
         /// Reads a single Excel sheet into a DataTable with optional filtering by multiple policy numbers
         /// </summary>
-        private DataTable ReadExcelSheetToDataTable(IWorkbook workbook, string sheetName, List<string> policyNumbers)
+        private DataTable ReadExcelSheetToDataTable(IWorkbook workbook, string sheetName, List<string> policyNumbers, bool isFirstTable = false)
         {
             IWorksheet sheet = workbook.Worksheets[sheetName];
             if (sheet?.UsedRange == null)
@@ -681,18 +734,17 @@ namespace Policy_Document_Generation.Controllers
                 dt.Columns.Add(columnName);
             }
 
-            // Determine filtering logic
-            bool shouldFilter = policyNumbers != null && policyNumbers.Count > 0;
+            // Apply filtering ONLY to first table (main data table)
+            bool shouldFilter = isFirstTable && policyNumbers != null && policyNumbers.Count > 0;
 
             // Add data rows (skip header)
             for (int row = headerRow + 1; row <= lastRow; row++)
             {
                 string firstColumnValue = sheet[row, 1].Value?.ToString()?.Trim();
 
-                // Apply filter if policy numbers specified
+                // Apply filter only to first table with policy numbers
                 if (shouldFilter)
                 {
-                    // Check if first column value matches any of the policy numbers
                     if (string.IsNullOrWhiteSpace(firstColumnValue) ||
                         !policyNumbers.Any(p => p.Equals(firstColumnValue, StringComparison.OrdinalIgnoreCase)))
                     {
@@ -739,29 +791,11 @@ namespace Policy_Document_Generation.Controllers
                         tableInfo.Columns.Add(columnName);
                     }
                 }
-
-                // Store for reference only (not for hierarchy decisions)
-                tableInfo.PrimaryKeyColumn = tableInfo.Columns.FirstOrDefault();
                 tables.Add(tableInfo);
             }
 
             return tables;
         }
-
-        private HashSet<string> GetTemplateMergeGroups(WordDocument document)
-        {
-            return new HashSet<string>(
-                document.MailMerge.GetMergeGroupNames(),
-                StringComparer.OrdinalIgnoreCase);
-        }
-
-        private bool IsUsedAsNestedGroup(WordDocument document, string tableName)
-        {
-            var groupNames = document.MailMerge.GetMergeGroupNames();
-            return groupNames.Any(g =>
-                string.Equals(g, tableName, StringComparison.OrdinalIgnoreCase));
-        }
-
 
         /// <summary>
         /// Executes mail merge based on data structure (flat, nested, or multiple tables)
@@ -851,38 +885,24 @@ namespace Policy_Document_Generation.Controllers
                 if (childTable == null)
                     continue;
 
-                // Try to build a valid relation
-                var relation = TryBuildRelation(parentTable, childTable, tableStructure);
+                // Inline the relation check instead of calling TryBuildRelation
+                var parentColumns = parentTable.Columns.Cast<DataColumn>()
+                    .Select(c => c.ColumnName)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                if (!string.IsNullOrEmpty(relation))
-                    return true;   // ✅ TRUE nested structure
+                var childColumns = childTable.Columns.Cast<DataColumn>()
+                    .Select(c => c.ColumnName)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                // Find common key (e.g., PolicyNumber)
+                var commonKey = parentColumns.Intersect(childColumns).FirstOrDefault();
+
+                if (!string.IsNullOrEmpty(commonKey))
+                    return true; // ✅ Nested structure exists
             }
 
             return false;
         }
-
-        private string TryBuildRelation(
-            DataTable parent,
-            DataTable child,
-            List<TableStructureInfo> tableStructure)
-        {
-            var parentColumns = parent.Columns.Cast<DataColumn>()
-                .Select(c => c.ColumnName)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            var childColumns = child.Columns.Cast<DataColumn>()
-                .Select(c => c.ColumnName)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            // Find common key (example: PolicyNumber)
-            var commonKey = parentColumns.Intersect(childColumns).FirstOrDefault();
-
-            if (commonKey == null)
-                return null;   // ❌ no relation
-
-            return $"{commonKey} = %{child.TableName}.{commonKey}%";
-        }
-
         /// <summary>
         /// Executes nested mail merge for hierarchical data structures with proper group handling
         /// Uses ArrayList of commands to define relationships - NO DataRelations needed
@@ -893,29 +913,38 @@ namespace Policy_Document_Generation.Controllers
             {
                 ArrayList commands = new ArrayList();
 
-                var mergeGroups = GetTemplateMergeGroups(document);
+                var groupNames = document.MailMerge.GetMergeGroupNames();
 
-                if (mergeGroups.Count == 0)
-                    throw new Exception("No BeginGroup found in Word template");
+                if (groupNames == null || groupNames.Length == 0)
+                    return;
 
                 // Parent (first group)
-                string parentGroup = mergeGroups.First();
-                var parentTable = tableStructure.First(t =>
+                string parentGroup = groupNames[0]; // ✅ Use array indexing
+                var parentTable = tableStructure.FirstOrDefault(t =>
                     string.Equals(t.SheetName, parentGroup, StringComparison.OrdinalIgnoreCase));
+
+                if (parentTable == null)
+                    return;
 
                 commands.Add(new DictionaryEntry(parentTable.SheetName, string.Empty));
 
                 // Children (remaining groups)
-                foreach (string childGroup in mergeGroups.Skip(1))
+                for (int i = 1; i < groupNames.Length; i++) // ✅ Use for loop for array
                 {
+                    string childGroup = groupNames[i];
+
                     var childTable = tableStructure.FirstOrDefault(t =>
                         string.Equals(t.SheetName, childGroup, StringComparison.OrdinalIgnoreCase));
 
                     if (childTable == null)
                         continue;
 
-                    string relationString = BuildRelationString(dataSet,parentTable.SheetName,childTable.SheetName);
-                    commands.Add(new DictionaryEntry(childTable.SheetName, relationString));
+                    string relationString = BuildRelationString(dataSet, parentTable.SheetName, childTable.SheetName);
+
+                    if (!string.IsNullOrEmpty(relationString))
+                    {
+                        commands.Add(new DictionaryEntry(childTable.SheetName, relationString));
+                    }
                 }
 
                 document.MailMerge.ExecuteNestedGroup(dataSet, commands);
@@ -960,8 +989,8 @@ namespace Policy_Document_Generation.Controllers
             if (commonKey == null)
                 return string.Empty;
 
-            // ✅ Correct DocIO relation format
-            return $"{commonKey} = %{childTableName}.{commonKey}%";
+            // Correct DocIO relation format
+            return $"{commonKey} = %{parentTableName}.{commonKey}%";
         }
 
 
@@ -1078,11 +1107,6 @@ namespace Policy_Document_Generation.Controllers
         {
             public string SheetName { get; set; }
             public List<string> Columns { get; set; } = new List<string>();
-            public List<string> KeyColumns { get; set; } = new List<string>();
-            public string PrimaryKeyColumn { get; set; }
-            public bool IsParent { get; set; }
-            public string ParentTableName { get; set; }
-            public string ParentKeyColumn { get; set; }
         }
 
     }

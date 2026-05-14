@@ -5,12 +5,6 @@ namespace Policy_Document_Generation.Models
     public class ReportDataViewModel
     {
         /// <summary>
-        /// Unique identifier to filter specific records from Excel data (e.g., PolicyNumber, InvoiceNumber)
-        /// </summary>
-        [Display(Name = "Report ID")]
-        public string? ReportId { get; set; }
-
-        /// <summary>
         /// Word or PowerPoint template file uploaded by user
         /// </summary>
         [Display(Name = "Template File")]
@@ -67,7 +61,5 @@ namespace Policy_Document_Generation.Models
         /// </summary>
         public bool MultiPartDocument { get; set; }
         public bool GenerateSeparateFiles { get; set; }
-        public bool IncludeAttachments { get; set; }
-        public bool EnableTracking { get; set; }
     }
 }
