@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Policy_Document_Generation.Models
 {
@@ -8,14 +9,13 @@ namespace Policy_Document_Generation.Models
         /// Word or PowerPoint template file uploaded by user
         /// </summary>
         [Display(Name = "Template File")]
-        public IFormFile? TemplateFile { get; set; }
+        public IFormFile TemplateFile { get; set; }
 
         /// <summary>
         /// Excel file containing data for mail merge
         /// </summary>
         [Display(Name = "Excel Data File")]
-        [Required(ErrorMessage = "Excel data file is required")]
-        public IFormFile? ExcelDataFile { get; set; }
+        public IFormFile ExcelDataFile { get; set; }
 
         /// <summary>
         /// Type of document to generate (Word, PowerPoint, PDF)
@@ -33,33 +33,33 @@ namespace Policy_Document_Generation.Models
         /// Policy numbers entered by user (one per line or comma-separated)
         /// </summary>
         [Display(Name = "Policy Numbers")]
-        public string? PolicyNumbers { get; set; }
+        public string PolicyNumbers { get; set; }
 
         /// <summary>
-        /// Type of additional document to generate alongside the main policy document.
-        /// Options: "claims-letter", "endorsement", "certificate", "renewal-notice", or empty for none.
+        /// Generate multi-part document with cover page and table of contents
         /// </summary>
-        [Display(Name = "Additional Document Type")]
-        public string? DocumentType { get; set; }
-
-        /// <summary>
-        /// Optional separate Excel file containing data specifically for the additional document.
-        /// If not provided, the system uses the main ExcelDataFile (looks for a matching sheet by document type).
-        /// </summary>
-        [Display(Name = "Additional Document Data File")]
-        public IFormFile? AdditionalDocExcelFile { get; set; }
-
-        /// <summary>
-        /// Optional custom Word template for the additional document.
-        /// If not provided, the system uses the built-in default template for the selected document type.
-        /// </summary>
-        [Display(Name = "Additional Document Template")]
-        public IFormFile? AdditionalDocTemplateFile { get; set; }
-
-        /// <summary>
-        /// Extra features flags
-        /// </summary>
+        [Display(Name = "Multi-part Document")]
         public bool MultiPartDocument { get; set; }
+
+        /// <summary>
+        /// Generate separate files for each policy instead of combined file
+        /// </summary>
+        [Display(Name = "Generate Separate Files")]
         public bool GenerateSeparateFiles { get; set; }
+
+        /// <summary>
+        /// Enable insertion of documents at bookmark locations in the template
+        /// </summary>
+        [Display(Name = "Use Bookmark Documents")]
+        public bool UseBookmarkDocuments { get; set; }
+
+        /// <summary>
+        /// Documents to be inserted at bookmark locations
+        /// File names must match bookmark names in the template
+        /// Supported formats: .docx, .rtf, .doc, .md, .txt, .html
+        /// </summary>
+        [Display(Name = "Bookmark Documents")]
+        public IFormFileCollection BookmarkDocuments { get; set; }
+
     }
 }

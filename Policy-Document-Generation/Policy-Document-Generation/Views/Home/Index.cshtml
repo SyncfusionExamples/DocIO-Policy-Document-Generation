@@ -185,6 +185,19 @@
         margin-top: 10px;
     }
 
+    .info-badge {
+        display: inline-block;
+        background: #dbeafe;
+        color: #1e40af;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 12px;
+        border-left: 4px solid #1e40af;
+        line-height: 1.5;
+    }
+
     .options-card {
         grid-column: 1 / -1;
     }
@@ -391,6 +404,173 @@
             display: block;
         }
 
+    /* Bookmark Documents Section Styles */
+    .bookmark-docs-section {
+        display: none;
+        margin-top: 20px;
+        padding: 20px;
+        background: #f8fafc;
+        border-radius: 12px;
+        border: 2px solid #e2e8f0;
+    }
+
+        .bookmark-docs-section.visible {
+            display: block;
+        }
+
+    .bookmark-docs-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .bookmark-upload-zone {
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 30px 20px;
+        text-align: center;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-bottom: 15px;
+    }
+
+        .bookmark-upload-zone:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+    .bookmark-upload-icon {
+        font-size: 40px;
+        margin-bottom: 10px;
+    }
+
+    .bookmark-upload-text {
+        font-size: 14px;
+        color: #475569;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    .bookmark-upload-hint {
+        font-size: 12px;
+        color: #94a3b8;
+    }
+
+    .bookmark-file-input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .bookmark-info-note {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #92400e;
+        margin-bottom: 15px;
+        font-weight: 600;
+        line-height: 1.5;
+    }
+
+    .uploaded-files-list {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 2px solid #e2e8f0;
+        margin-top: 15px;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .uploaded-file-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-bottom: 1px solid #e2e8f0;
+        transition: all 0.2s;
+    }
+
+        .uploaded-file-item:last-child {
+            border-bottom: none;
+        }
+
+        .uploaded-file-item:hover {
+            background: #f8fafc;
+        }
+
+    .file-item-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+    }
+
+    .file-item-icon {
+        width: 32px;
+        height: 32px;
+        background: #dbeafe;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+    }
+
+    .file-item-details {
+        flex: 1;
+    }
+
+    .file-item-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1e293b;
+        word-break: break-word;
+    }
+
+    .file-item-size {
+        font-size: 11px;
+        color: #94a3b8;
+        margin-top: 2px;
+    }
+
+    .file-item-remove {
+        background: #fee2e2;
+        border: none;
+        color: #dc2626;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        transition: all 0.2s;
+        flex-shrink: 0;
+    }
+
+        .file-item-remove:hover {
+            background: #fecaca;
+        }
+
+    .file-count-badge {
+        display: inline-block;
+        background: #dbeafe;
+        color: #1e40af;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 12px;
+    }
+
     @@media (max-width: 1024px) {
         .content-grid {
             grid-template-columns: 1fr;
@@ -443,8 +623,8 @@
                 <div class="upload-zone" id="template-zone">
                     <div class="upload-icon">📋</div>
                     <div class="upload-text">Click to upload template</div>
-                    <div class="upload-hint">Word document (.docx) with merge fields</div>
-                    @Html.TextBox("templateFile", null, new { type = "file", accept = ".docx", onchange = "handleUpload(this, 'template')" })
+                    <div class="upload-hint">Word document (.docx, .doc, .rtf, .md, .html,.txt) with merge fields</div>
+                    @Html.TextBox("templateFile", null, new { type = "file", accept = ".docx,.rtf,.doc,.md,.html,.txt", onchange = "handleUpload(this, 'template')" })
                     <div class="file-badge" id="template-badge" style="display: none;">
                         ✓ <span id="template-name"></span>
                         <button type="button" onclick="clearFile('template')">×</button>
@@ -462,8 +642,8 @@
                 <div class="upload-zone" id="excelFile-zone">
                     <div class="upload-icon">📈</div>
                     <div class="upload-text">Click to upload Excel data</div>
-                    <div class="upload-hint">Excel workbook (.xlsx) with policy data</div>
-                    @Html.TextBox("excelDataFile", null, new { type = "file", accept = ".xlsx,.xls", onchange = "handleUpload(this, 'excelFile')" })
+                    <div class="upload-hint">Excel workbook (.xlsx, .xls, .csv, .xlts, .xlsm) with policy data</div>
+                    @Html.TextBox("excelDataFile", null, new { type = "file", accept = ".xlsx,.xls,.xlts,.xlsm, .csv", onchange = "handleUpload(this, 'excelFile')" })
                     <div class="file-badge" id="excelFile-badge" style="display: none;">
                         ✓ <span id="excelFile-name"></span>
                         <button type="button" onclick="clearFile('excelFile')">×</button>
@@ -551,21 +731,6 @@
                     </div>
                 </div>
 
-                <!-- Additional Document -->
-                <div class="option-box">
-                    <label class="option-label">Additional Document</label>
-                    <select name="documentType" id="documentType" class="select-box" onchange="toggleAdditionalDocUploads()">
-                        <option value="">None - Main policy only</option>
-                        <option value="claims-letter">📧 Claims Letter</option>
-                        <option value="endorsement">📜 Endorsement</option>
-                        <option value="certificate">🏆 Certificate of Insurance</option>
-                        <option value="renewal-notice">🔔 Renewal Notice</option>
-                    </select>
-                    <div class="item-desc" style="margin-top: 10px; padding: 0 10px;">
-                        Select to generate additional document along with main policy
-                    </div>
-                </div>
-
                 <!-- Extra Options -->
                 <div class="option-box">
                     <label class="option-label">Extra Features</label>
@@ -584,62 +749,48 @@
                                 <div class="item-desc">Generate individual files per policy</div>
                             </div>
                         </label>
+                        <label class="checkbox-item">
+                            <input type="checkbox" id="useBookmarkDocuments" name="useBookmarkDocuments" onchange="toggleBookmarkDocumentsSection()" />
+                            <div class="item-content">
+                                <div class="item-title">📎 Insert Documents Based on Placeholder Text </div>
+                                <div class="item-desc">Embed documents at Placeholder text</div>
+                            </div>
+                        </label>
                     </div>
-                </div>
-               
-            </div>
-        </div>
-
-        <!-- Additional Document Data Uploads (shown only when a doc type is selected) -->
-        <div class="card options-card" id="additional-doc-uploads" style="display: none;">
-            <div class="card-title">
-                <div class="icon">📎</div>
-                Additional Document Sources
-                <span style="font-size:13px; font-weight:500; color:#64748b; margin-left:8px;">
-                    — leave blank to auto-use the same Excel data
-                </span>
-            </div>
-
-            <div class="content-grid" style="margin-bottom: 0;">
-                <!-- Custom Additional Template -->
-                <div>
-                    <div class="upload-zone" id="addTemplate-zone">
-                        <div class="upload-icon">📝</div>
-                        <div class="upload-text">Custom Additional Template <span style="color:#94a3b8; font-weight:400;">(optional)</span></div>
-                        <div class="upload-hint">Override the built-in template for the selected document type</div>
-                        @Html.TextBox("additionalDocTemplateFile", null, new { type = "file", accept = ".docx", onchange = "handleUpload(this, 'addTemplate')" })
-                        <div class="file-badge" id="addTemplate-badge" style="display: none;">
-                            ✓ <span id="addTemplate-name"></span>
-                            <button type="button" onclick="clearFile('addTemplate')">×</button>
-                        </div>
-                    </div>
-                    <div class="default-badge">⚡ Built-in template will be used if not uploaded</div>
-                </div>
-
-                <!-- Separate Additional Data Excel -->
-                <div>
-                    <div class="upload-zone" id="addExcel-zone">
-                        <div class="upload-icon">📊</div>
-                        <div class="upload-text">Separate Data for Additional Doc <span style="color:#94a3b8; font-weight:400;">(optional)</span></div>
-                        <div class="upload-hint">Excel with a sheet matching the additional template's group name</div>
-                        @Html.TextBox("additionalDocExcelFile", null, new { type = "file", accept = ".xlsx,.xls", onchange = "handleUpload(this, 'addExcel')" })
-                        <div class="file-badge" id="addExcel-badge" style="display: none;">
-                            ✓ <span id="addExcel-name"></span>
-                            <button type="button" onclick="clearFile('addExcel')">×</button>
-                        </div>
-                    </div>
-                    <div class="default-badge">⚡ Same Excel used if not uploaded — sheet name must match template group</div>
                 </div>
             </div>
 
-            <!-- How it works hint -->
-            <div style="margin-top: 20px; padding: 15px 18px; background: #f0f4ff; border-radius: 10px; border-left: 4px solid #667eea;">
-                <div style="font-size:13px; font-weight:700; color:#3730a3; margin-bottom:6px;">💡 How additional document data works</div>
-                <ul style="font-size:13px; color:#4338ca; line-height:1.8; padding-left:18px;">
-                    <li><strong>Same Excel (default):</strong> Add a sheet whose name matches the <code>«TableStart:SheetName»</code> group in your additional template. The same PolicyNumber column links the data automatically.</li>
-                    <li><strong>Separate Excel:</strong> Upload a dedicated Excel above. Its first column must be PolicyNumber to filter per-policy correctly.</li>
-                    <li><strong>Custom template:</strong> Upload your own <code>.docx</code> with any merge fields — both options above apply.</li>
-                </ul>
+            <!-- Bookmark Documents Section (appears when checkbox is checked) -->
+            <div class="bookmark-docs-section" id="bookmark-docs-section">
+                <div class="bookmark-docs-title">
+                    <span>📎 Add Documents for Placeholder-Based Insertion</span>
+                </div>
+
+                <div class="bookmark-info-note">
+                    ℹ️ Document file names must exactly match the Placeholder text in your main template. For example, if you have a Placeholder text as "Attachment1", name your document as "Attachment1.docx"
+                </div>
+
+                <div class="bookmark-upload-zone" id="bookmark-upload-zone" style="position: relative;">
+                    <div class="bookmark-upload-icon">📁</div>
+                    <div class="bookmark-upload-text">Click to select documents</div>
+                    <div class="bookmark-upload-hint">Supported formats: .docx, .rtf, .doc, .md, .txt, .html (one or more files)</div>
+                    <input type="file"
+                           id="bookmarkDocumentsInput"
+                           name="bookmarkDocuments"
+                           multiple
+                           accept=".docx,.rtf,.doc,.md,.txt,.html"
+                           onchange="handleBookmarkDocumentUpload(this)"
+                           class="bookmark-file-input" />
+                </div>
+
+                <!-- Uploaded Files List -->
+                <div id="uploaded-files-container" style="display: none;">
+                    <div class="uploaded-files-list" id="uploaded-files-list">
+                    </div>
+                    <div class="file-count-badge">
+                        <span id="file-count-text">0 files selected</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -700,9 +851,7 @@
         function clearFile(type) {
             const nameMap = {
                 'template':    'templateFile',
-                'excelFile':   'excelDataFile',
-                'addTemplate': 'additionalDocTemplateFile',
-                'addExcel':    'additionalDocExcelFile'
+                'excelFile':   'excelDataFile'
             };
             const inputName = nameMap[type] || type;
             const input = document.querySelector('input[name="' + inputName + '"]');
@@ -714,11 +863,103 @@
             if (zone)   zone.classList.remove('has-file');
         }
 
-        // Show/hide additional document upload panel based on selected doc type
-        function toggleAdditionalDocUploads() {
-            const docType = document.getElementById('documentType').value;
-            const panel   = document.getElementById('additional-doc-uploads');
-            panel.style.display = docType ? 'block' : 'none';
+        // Toggle bookmark documents section visibility
+        function toggleBookmarkDocumentsSection() {
+            const checkbox = document.getElementById('useBookmarkDocuments');
+            const section = document.getElementById('bookmark-docs-section');
+
+            if (checkbox.checked) {
+                section.classList.add('visible');
+            } else {
+                section.classList.remove('visible');
+                // Clear uploaded files when unchecked
+                clearBookmarkDocuments();
+            }
+        }
+
+        // Handle bookmark document uploads
+        function handleBookmarkDocumentUpload(input) {
+            const files = input.files;
+            const container = document.getElementById('uploaded-files-container');
+            const list = document.getElementById('uploaded-files-list');
+            const countBadge = document.getElementById('file-count-text');
+
+            // Clear previous list
+            list.innerHTML = '';
+
+            if (files && files.length > 0) {
+                container.style.display = 'block';
+                countBadge.textContent = `${files.length} ${files.length === 1 ? 'file' : 'files'} selected`;
+
+                // Display each uploaded file
+                Array.from(files).forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'uploaded-file-item';
+                    fileItem.id = `file-item-${index}`;
+
+                    // Get file icon based on extension
+                    const fileExt = file.name.split('.').pop().toLowerCase();
+                    const fileIcons = {
+                        'docx': '📄',
+                        'doc': '📄',
+                        'rtf': '📄',
+                        'txt': '📝',
+                        'md': '📝',
+                        'html': '🌐',
+                        'htm': '🌐'
+                    };
+                    const icon = fileIcons[fileExt] || '📎';
+
+                    // Format file size
+                    const fileSize = (file.size / 1024).toFixed(2);
+                    const sizeSuffix = fileSize > 1024 ? `${(fileSize / 1024).toFixed(2)} MB` : `${fileSize} KB`;
+
+                    fileItem.innerHTML = `
+                        <div class="file-item-info">
+                            <div class="file-item-icon">${icon}</div>
+                            <div class="file-item-details">
+                                <div class="file-item-name">${file.name}</div>
+                                <div class="file-item-size">${sizeSuffix}</div>
+                            </div>
+                        </div>
+                        <button type="button" class="file-item-remove" onclick="removeBookmarkFile(${index})">✕</button>
+                    `;
+
+                    list.appendChild(fileItem);
+                });
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        // Remove individual bookmark document
+        function removeBookmarkFile(index) {
+            const input = document.getElementById('bookmarkDocumentsInput');
+            const dataTransfer = new DataTransfer();
+            const files = input.files;
+
+            // Copy all files except the one at index
+            Array.from(files).forEach((file, i) => {
+                if (i !== index) {
+                    dataTransfer.items.add(file);
+                }
+            });
+
+            input.files = dataTransfer.files;
+
+            // Re-render the list
+            handleBookmarkDocumentUpload(input);
+        }
+
+        // Clear all bookmark documents
+        function clearBookmarkDocuments() {
+            const input = document.getElementById('bookmarkDocumentsInput');
+            const container = document.getElementById('uploaded-files-container');
+            const list = document.getElementById('uploaded-files-list');
+
+            input.value = '';
+            container.style.display = 'none';
+            list.innerHTML = '';
         }
 
         // Toggle policy input visibility based on selection mode
@@ -748,7 +989,6 @@
                 return;
             }
 
-            // Split by newlines or commas and filter empty entries
             const policies = text.split(/[\n,]+/).map(p => p.trim()).filter(p => p.length > 0);
             const count = policies.length;
 
@@ -768,6 +1008,8 @@
             const excelFile = document.querySelector('input[name="excelDataFile"]');
             const selectionMode = document.querySelector('input[name="selectionMode"]:checked').value;
             const policyNumbers = document.getElementById('policyNumbers').value.trim();
+            const useBookmarkDocuments = document.getElementById('useBookmarkDocuments').checked;
+            const bookmarkInput = document.getElementById('bookmarkDocumentsInput');
             const errorDiv = document.querySelector('.error-message');
 
             // Check if Excel file is uploaded
@@ -788,6 +1030,15 @@
                 return false;
             }
 
+            // Check if bookmark documents are uploaded when feature is enabled
+            if (useBookmarkDocuments && (!bookmarkInput.files || bookmarkInput.files.length === 0)) {
+                e.preventDefault();
+                errorDiv.textContent = '⚠️ Please upload at least one document for bookmark insertion or disable the feature';
+                errorDiv.style.display = 'block';
+                document.getElementById('bookmark-docs-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
             errorDiv.style.display = 'none';
         });
 
@@ -797,23 +1048,28 @@
         });
 
         // Convert checkboxes to proper boolean values before form submission
-            document.querySelector('form').addEventListener('submit', function(e) {
-                // Handle checkboxes - set to "on" for checked, remove attribute for unchecked
-                const multiPartDoc = document.getElementById('multiPartDocument');
-                const separateFiles = document.getElementById('generateSeparateFiles');
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const multiPartDoc = document.getElementById('multiPartDocument');
+            const separateFiles = document.getElementById('generateSeparateFiles');
+            const useBookmarkDocs = document.getElementById('useBookmarkDocuments');
 
-                // Ensure checkboxes have proper values
-                if (multiPartDoc.checked) {
-                    multiPartDoc.value = 'true';
-                } else {
-                    multiPartDoc.value = 'false';
-                }
+            if (multiPartDoc.checked) {
+                multiPartDoc.value = 'true';
+            } else {
+                multiPartDoc.value = 'false';
+            }
 
-                if (separateFiles.checked) {
-                    separateFiles.value = 'true';
-                } else {
-                    separateFiles.value = 'false';
-                }
-            });
+            if (separateFiles.checked) {
+                separateFiles.value = 'true';
+            } else {
+                separateFiles.value = 'false';
+            }
+
+            if (useBookmarkDocs.checked) {
+                useBookmarkDocs.value = 'true';
+            } else {
+                useBookmarkDocs.value = 'false';
+            }
+        });
     </script>
 }

@@ -117,7 +117,7 @@ namespace Policy_Document_Generation.Controllers
         /// If an additional document type is selected, both are returned as a ZIP archive.
         /// Supports both DOCX and PDF output formats.
         /// </summary>
-        private IActionResult GenerateSingleDocument(Stream documentStream,DataSet dataSet, Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
+        private IActionResult GenerateSingleDocument(Stream documentStream, DataSet dataSet, Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
         {
             try
             {
@@ -127,58 +127,18 @@ namespace Policy_Document_Generation.Controllers
                     return RedirectToAction("Index");
                 }
 
-                bool hasAdditionalDoc = !string.IsNullOrEmpty(model.DocumentType);
                 bool isPdf = model.OutputFormat?.ToLower() == "pdf";
                 string fileExtension = isPdf ? "pdf" : "docx";
                 string baseName = policyNumbers.Count == 1 ? $"Policy_{policyNumbers[0]}" : $"Policies_{policyNumbers.Count}_Documents";
 
-                // Generate main policy document bytes
+                // Generate main policy document
                 byte[] mainDocBytes = GenerateDocumentBytes(documentStream, dataSet, model, isPdf);
 
-                if (!hasAdditionalDoc)
-                {
-                    // Return single file directly
-                    string mimeType = isPdf ? "application/pdf"
-                        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-                    return File(mainDocBytes, mimeType, $"{baseName}.{fileExtension}");
-                }
+                // Return the document directly
+                string mimeType = isPdf ? "application/pdf"
+                    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-                // Generate additional document — template & data resolved via priority chain
-                Stream additionalTemplateStream = GetAdditionalDocumentTemplate(model.DocumentType, model.AdditionalDocTemplateFile);
-                byte[] additionalDocBytes = null;
-
-                if (additionalTemplateStream != null)
-                {
-                    DataSet additionalDataSet = GetAdditionalDocDataSet(model, excelStream, dataSet, policyNumbers);
-                    // Filter dataset to only include tables that have merge groups in the template
-                    DataSet filteredDataSet = FilterDataSetForTemplate(additionalTemplateStream, additionalDataSet);
-                    additionalDocBytes = GenerateDocumentBytes(additionalTemplateStream, filteredDataSet, model, isPdf);
-                    additionalTemplateStream.Dispose();
-                }
-
-                // Return both documents as a ZIP archive
-                string additionalDocLabel = GetAdditionalDocumentLabel(model.DocumentType);
-                using (MemoryStream zipStream = new MemoryStream())
-                {
-                    using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create, true))
-                    {
-                        // Add main policy document
-                        var mainEntry = archive.CreateEntry($"{baseName}.{fileExtension}");
-                        using (var entryStream = mainEntry.Open())
-                            entryStream.Write(mainDocBytes, 0, mainDocBytes.Length);
-
-                        // Add additional document
-                        if (additionalDocBytes != null)
-                        {
-                            var addEntry = archive.CreateEntry($"{baseName}_{additionalDocLabel}.{fileExtension}");
-                            using (var entryStream = addEntry.Open())
-                                entryStream.Write(additionalDocBytes, 0, additionalDocBytes.Length);
-                        }
-                    }
-
-                    zipStream.Position = 0;
-                    return File(zipStream.ToArray(), "application/zip", $"{baseName}_Documents_{DateTime.Now:yyyyMMdd_HHmmss}.zip");
-                }
+                return File(mainDocBytes, mimeType, $"{baseName}.{fileExtension}");
             }
             catch (Exception ex)
             {
@@ -196,6 +156,12 @@ namespace Policy_Document_Generation.Controllers
             using (WordDocument document = new WordDocument(templateStream, FormatType.Docx))
             {
                 ExecuteMailMerge(document, dataSet);
+
+                // Insert documents at bookmark locations after mail merge
+                if (model.UseBookmarkDocuments && model.BookmarkDocuments != null && model.BookmarkDocuments.Count > 0)
+                {
+                    InsertBookmarkDocuments(document, model);
+                }
 
                 if (model.MultiPartDocument)
                 {
@@ -223,102 +189,100 @@ namespace Policy_Document_Generation.Controllers
         }
 
         /// <summary>
-        /// Returns the file stream for the selected additional document template from wwwroot/Data.
-        /// Maps document type keys to their corresponding template filenames.
+        /// Inserts documents by finding text in main document, creating bookmark, then inserting content
+        /// Document file names are used to search for matching text in the document
         /// </summary>
-        /// <summary>
-        /// Resolves the Word template stream for the additional document.
-        /// Priority: 1) User-uploaded custom template  2) Built-in default template from wwwroot/Data.
-        /// </summary>
-        private Stream GetAdditionalDocumentTemplate(string documentType, IFormFile uploadedTemplate = null)
+        private void InsertBookmarkDocuments(WordDocument document, ReportDataViewModel model)
         {
-            // Priority 1: user-uploaded custom template
-            if (uploadedTemplate != null && uploadedTemplate.Length > 0)
+            if (!model.UseBookmarkDocuments || model.BookmarkDocuments == null || model.BookmarkDocuments.Count == 0)
+                return;
+
+            foreach (var bookmarkDocFile in model.BookmarkDocuments)
             {
-                MemoryStream ms = new MemoryStream();
-                uploadedTemplate.CopyTo(ms);
-                ms.Position = 0;
-                return ms;
+                if (bookmarkDocFile.Length == 0)
+                    continue;
+
+                // Extract document name from filename (without extension) - this is what to search for
+                string searchText = Path.GetFileNameWithoutExtension(bookmarkDocFile.FileName);
+
+                try
+                {
+                    // Find ALL text occurrences in document using Find API
+                    TextSelection[] textSelections = document.FindAll(searchText, false, false);
+
+                    if (textSelections == null || textSelections.Length == 0)
+                    {
+                        _logger.LogWarning($"Text '{searchText}' not found in main document. Skipping document '{bookmarkDocFile.FileName}'");
+                        continue;
+                    }
+
+                    _logger.LogInformation($"Found {textSelections.Length} occurrence(s) of '{searchText}'");
+
+                    // Process in REVERSE order to avoid index shifting issues
+                    for (int i = textSelections.Length - 1; i >= 0; i--)
+                    {
+                        TextSelection textSelection = textSelections[i];
+                        WParagraph targetParagraph = textSelection.GetAsOneRange().OwnerParagraph;
+
+                        // Get the ACTUAL container body
+                        WTextBody body = targetParagraph.OwnerTextBody;
+
+                        // Find index inside that body
+                        int index = body.ChildEntities.IndexOf(targetParagraph);
+
+                        // Insert new paragraph in SAME container
+                        WParagraph newParagraph = new WParagraph(document);
+                        body.ChildEntities.Insert(index + 1, newParagraph);
+
+                        // Create bookmark on the new paragraph
+                        string bookmarkName = $"InsertedDoc_{Guid.NewGuid().ToString().Substring(0, 8)}";
+                        newParagraph.AppendBookmarkStart(bookmarkName);
+                        newParagraph.AppendBookmarkEnd(bookmarkName);
+
+                        _logger.LogInformation($"Created bookmark '{bookmarkName}' after text '{searchText}' (Occurrence {i + 1})");
+
+                        // Insert document content at the bookmark
+                        using (var ms = new MemoryStream())
+                        {
+                            bookmarkDocFile.CopyTo(ms);
+                            ms.Position = 0;
+                            InsertDocumentAtBookmark(document, bookmarkName, ms);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Could not insert document for '{searchText}'");
+                }
             }
-
-            // Priority 2: built-in default template
-            if (string.IsNullOrEmpty(documentType))
-                return null;
-
-            string fileName = documentType switch
-            {
-                "claims-letter"  => "Claim Letter.docx",
-                "endorsement"    => "EndorsementTemplate.docx",
-                "certificate"    => "Certificate Of Insurance.docx",
-                "renewal-notice" => "RenewalNoticeTemplate.docx",
-                _                => null
-            };
-
-            if (fileName == null)
-                return null;
-
-            string filePath = Path.Combine(_hostingEnvironment.WebRootPath, "Data", fileName);
-
-            if (!System.IO.File.Exists(filePath))
-                return null;
-
-            return new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         }
 
         /// <summary>
-        /// Returns a clean display label for an additional document type key (used in file naming).
+        /// Inserts document content at a specific bookmark location
         /// </summary>
-        private string GetAdditionalDocumentLabel(string documentType)
+        private void InsertDocumentAtBookmark(WordDocument mainDoc, string bookmarkName, Stream documentStream)
         {
-            return documentType switch
+            using (WordDocument bookmarkDoc = new WordDocument(documentStream, FormatType.Automatic))
             {
-                "claims-letter"  => "ClaimsLetter",
-                "endorsement"    => "Endorsement",
-                "certificate"    => "Certificate",
-                "renewal-notice" => "RenewalNotice",
-                _                => "AdditionalDocument"
-            };
-        }
+                // Create TextBodyPart from bookmark document
+                TextBodyPart bodyPart = new TextBodyPart(bookmarkDoc);
 
-        /// <summary>
-        /// Resolves the DataSet used for additional document mail merge.
-        ///
-        /// Resolution strategy:
-        ///   1. If user uploaded a separate Excel for the additional doc → use it exclusively.
-        ///   2. Otherwise, reuse the main Excel stream:
-        ///      a. If the main DataSet already contains a sheet that matches the additional
-        ///         document's expected sheet name (e.g. "Claims") → pass the full DataSet as-is
-        ///         so the additional template can access that sheet's merge group.
-        ///      b. If no matching sheet exists → fall back to the same main DataSet
-        ///         (fields that exist will be merged; unrecognised fields are left blank).
-        ///
-        /// This means a single Excel with multiple sheets (Policies, Claims, Endorsements …)
-        /// covers all document types without any extra file.
-        /// </summary>
-        private DataSet GetAdditionalDocDataSet(
-            ReportDataViewModel model,
-            Stream mainExcelStream,
-            DataSet mainDataSet,
-            List<string> policyNumbers)
-        {
-            // --- Priority 1: dedicated separate Excel uploaded by user ---
-            if (model.AdditionalDocExcelFile != null && model.AdditionalDocExcelFile.Length > 0)
-            {
-                MemoryStream separateStream = new MemoryStream();
-                model.AdditionalDocExcelFile.CopyTo(separateStream);
-                separateStream.Position = 0;
-                return CreateMailMergeDataSet(separateStream, policyNumbers);
+                // Extract all content from bookmark document
+                foreach (IWSection section in bookmarkDoc.Sections)
+                {
+                    foreach (IEntity entity in section.Body.ChildEntities)
+                    {
+                        bodyPart.BodyItems.Add(entity.Clone());
+                    }
+                }
+
+                // Navigate to bookmark and insert content
+                BookmarksNavigator navigator = new BookmarksNavigator(mainDoc);
+                navigator.MoveToBookmark(bookmarkName, true, true);
+                navigator.ReplaceBookmarkContent(bodyPart);
+
+                _logger.LogInformation($"Successfully inserted document content at bookmark '{bookmarkName}'");
             }
-
-            // --- Priority 2: reuse main Excel (same stream, reset position) ---
-            // The CreateMailMergeDataSet already loaded all sheets into mainDataSet.
-            // We can pass it directly — ExecuteMailMerge will only use the tables
-            // whose names match the «TableStart:Name» groups in the template.
-            // Reset the main stream so it can be reopened if needed elsewhere.
-            if (mainExcelStream.CanSeek)
-                mainExcelStream.Position = 0;
-
-            return mainDataSet;
         }
 
         /// <summary>
@@ -335,41 +299,17 @@ namespace Policy_Document_Generation.Controllers
             {
                 bool isPdf = model.OutputFormat?.ToLower() == "pdf";
                 string fileExtension = isPdf ? "pdf" : "docx";
-                bool hasAdditionalDoc = !string.IsNullOrEmpty(model.DocumentType);
 
                 using (MemoryStream zipStream = new MemoryStream())
                 {
                     using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create, true))
                     {
                         // Step 2: Generate main policy documents (merge once, split by page breaks)
-                        byte[] mainDocsZip = GenerateDocumentsWithPageBreakSplit(
+                        byte[] docsZip = GenerateDocumentsWithPageBreakSplit(
                             documentStream, dataSet, policyNumbers, model, isPdf, fileExtension);
 
                         // Step 3: Add main documents to final ZIP
-                        AddZipContentsToArchive(mainDocsZip, archive);
-
-                        // Step 4: Generate additional documents if requested
-                        if (hasAdditionalDoc)
-                        {
-                            Stream additionalTemplateStream = GetAdditionalDocumentTemplate(
-                                model.DocumentType, model.AdditionalDocTemplateFile);
-
-                            if (additionalTemplateStream != null)
-                            {
-                                // Get DataSet for additional document (reuses main DataSet or loads separate Excel)
-                                excelStream.Position = 0;
-                                DataSet additionalDataSet = GetAdditionalDocDataSet(model, excelStream, dataSet, policyNumbers);
-                                // Filter dataset to only include tables that have merge groups in the template
-                                DataSet filteredDataSet = FilterDataSetForTemplate(additionalTemplateStream, additionalDataSet);
-                                string additionalLabel = GetAdditionalDocumentLabel(model.DocumentType);
-
-                                byte[] additionalDocsZip = GenerateDocumentsWithPageBreakSplit(
-                                    additionalTemplateStream, filteredDataSet, policyNumbers, 
-                                    model, isPdf, fileExtension, additionalLabel);
-
-                                AddZipContentsToArchive(additionalDocsZip, archive);
-                            }
-                        }
+                        AddZipContentsToArchive(docsZip, archive);                      
                     }
 
                     zipStream.Position = 0;
@@ -405,6 +345,12 @@ namespace Policy_Document_Generation.Controllers
 
                 // Execute mail merge ONCE with all data
                 ExecuteMailMerge(document, dataSet);
+
+                // Insert documents at bookmark locations after mail merge
+                if (model.UseBookmarkDocuments && model.BookmarkDocuments != null && model.BookmarkDocuments.Count > 0)
+                {
+                    InsertBookmarkDocuments(document, model);
+                }
 
                 // Split the merged document by page breaks and return as ZIP
                 return SplitDocumentByPageBreaks(document, policyNumbers, isPdf, fileExtension, fileNameSuffix, model.MultiPartDocument);
