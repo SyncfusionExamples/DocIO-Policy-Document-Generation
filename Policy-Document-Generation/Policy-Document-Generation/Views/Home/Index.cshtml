@@ -303,6 +303,10 @@
         gap: 12px;
     }
 
+    .checkbox-item.full-width {
+        grid-column: 1 / -1;
+    }
+
     .action-section {
         background: white;
         border-radius: 16px;
@@ -695,6 +699,10 @@
                         <span style="color: #667eea;">💡</span>
                         <span>Enter one policy number per line or comma-separated (e.g., POL001, POL002, POL003)</span>
                     </div>
+                    <div style="display: flex; align-items: start; gap: 8px; padding: 10px 16px; background: #fff3cd; border-radius: 8px; border-left: 3px solid #ffc107; margin-top: 12px; font-size: 13px; color: #856404;">
+                        <span style="font-size: 16px;">⚠️</span>
+                        <span><strong>Note:</strong> To create specific policy reports, your data file must contain a Policy Number column.</span>
+                    </div>
                     <div id="policy-count" style="margin-top: 8px; padding: 8px 12px; background: #f0f4ff; border-radius: 8px; font-size: 13px; font-weight: 600; color: #667eea; display: none;">
                         <span id="count-text"></span>
                     </div>
@@ -749,10 +757,10 @@
                                 <div class="item-desc">Generate individual files per policy</div>
                             </div>
                         </label>
-                        <label class="checkbox-item">
+                        <label class="checkbox-item full-width">
                             <input type="checkbox" id="useBookmarkDocuments" name="useBookmarkDocuments" onchange="toggleBookmarkDocumentsSection()" />
                             <div class="item-content">
-                                <div class="item-title">📎 Insert Documents Based on Placeholder Text </div>
+                                <div class="item-title">📎 Insert Documents Based on Placeholder Text</div>
                                 <div class="item-desc">Embed documents at Placeholder text</div>
                             </div>
                         </label>
@@ -1005,21 +1013,11 @@
 
         // Validate form before submission
         document.querySelector('form').addEventListener('submit', function(e) {
-            const excelFile = document.querySelector('input[name="excelDataFile"]');
             const selectionMode = document.querySelector('input[name="selectionMode"]:checked').value;
             const policyNumbers = document.getElementById('policyNumbers').value.trim();
             const useBookmarkDocuments = document.getElementById('useBookmarkDocuments').checked;
             const bookmarkInput = document.getElementById('bookmarkDocumentsInput');
             const errorDiv = document.querySelector('.error-message');
-
-            // Check if Excel file is uploaded
-            if (!excelFile.files || excelFile.files.length === 0) {
-                e.preventDefault();
-                errorDiv.textContent = '⚠️ Please upload an Excel data file';
-                errorDiv.style.display = 'block';
-                document.getElementById('excelFile-zone').scrollIntoView({ behavior: 'smooth', block: 'center' });
-                return false;
-            }
 
             // Check if policy numbers are entered in specific mode
             if (selectionMode === 'specific' && !policyNumbers) {

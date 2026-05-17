@@ -338,7 +338,7 @@ namespace Policy_Document_Generation.Controllers
             string fileExtension,
             string fileNameSuffix = "")
         {
-            using (WordDocument document = new WordDocument(templateStream, FormatType.Docx))
+            using (WordDocument document = new WordDocument(templateStream, FormatType.Automatic))
             {
                 // KEY: Ensure each record starts on a new page (creates page breaks automatically)
                 document.MailMerge.StartAtNewPage = true;
@@ -456,44 +456,7 @@ namespace Policy_Document_Generation.Controllers
                 return zipStream.ToArray();
             }
         }
-        /// <summary>
-        /// Filters the dataset to include only tables that match template merge groups.
-        /// Prevents mismatch between template groups and dataset tables.
-        /// </summary>
-        private DataSet FilterDataSetForTemplate(Stream templateStream, DataSet dataSet)
-        {
-            try
-            {
-                using (WordDocument tempDoc = new WordDocument(templateStream, FormatType.Docx))
-                {
-                    var mergeGroupNames = tempDoc.MailMerge.GetMergeGroupNames();
-
-                    if (mergeGroupNames == null || mergeGroupNames.Length == 0)
-                        return dataSet;
-
-                    // Create new filtered dataset
-                    DataSet filteredDataSet = new DataSet();
-
-                    // Add only tables that match merge groups
-                    foreach (string groupName in mergeGroupNames)
-                    {
-                        DataTable matchingTable = dataSet.Tables[groupName];
-                        if (matchingTable != null)
-                        {
-                            // Clone and add to filtered dataset
-                            filteredDataSet.Tables.Add(matchingTable.Copy());
-                        }
-                    }
-
-                    return filteredDataSet;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error filtering dataset for template. Using original dataset.");
-                return dataSet;
-            }
-        }
+        
         /// <summary>
         /// Helper method: Extracts files from a ZIP byte array and adds them to target archive.
         /// Used to combine main documents and additional documents into a single ZIP.
@@ -627,30 +590,22 @@ namespace Policy_Document_Generation.Controllers
 
                 IWorkbook workbook = application.Workbooks.Open(excelStream);
 
-                // Step 1: Identify table structure and relationships
-                var tableStructure = AnalyzeExcelStructure(workbook);
-
-                // Step 2: Create DataTables from sheets
-                int tableIndex = 0;
-                foreach (var tableInfo in tableStructure)
+                // Read all sheets into DataTables
+                foreach (IWorksheet sheet in workbook.Worksheets)
                 {
-                    // Only apply filter to first table
-                    bool isFirstTable = (tableIndex == 0);
+                    if (sheet.UsedRange == null || sheet.UsedRange.LastRow < 2)
+                        continue;
+
                     DataTable dt = ReadExcelSheetToDataTable(
                         workbook,
-                        tableInfo.SheetName,
-                        policyNumbers,
-                        isFirstTable: isFirstTable);
+                        sheet.Name,
+                        policyNumbers);
 
                     if (dt != null && dt.Rows.Count > 0)
                     {
                         dataSet.Tables.Add(dt);
                     }
-                    tableIndex++;
                 }
-
-                // Store table structure in DataSet extended properties for later use
-                dataSet.ExtendedProperties["TableStructure"] = tableStructure;
             }
 
             return dataSet;
@@ -659,7 +614,7 @@ namespace Policy_Document_Generation.Controllers
         /// <summary>
         /// Reads a single Excel sheet into a DataTable with optional filtering by multiple policy numbers
         /// </summary>
-        private DataTable ReadExcelSheetToDataTable(IWorkbook workbook, string sheetName, List<string> policyNumbers, bool isFirstTable = false)
+        private DataTable ReadExcelSheetToDataTable(IWorkbook workbook, string sheetName, List<string> policyNumbers)
         {
             IWorksheet sheet = workbook.Worksheets[sheetName];
             if (sheet?.UsedRange == null)
@@ -680,19 +635,34 @@ namespace Policy_Document_Generation.Controllers
                 dt.Columns.Add(columnName);
             }
 
-            // Apply filtering ONLY to first table (main data table)
-            bool shouldFilter = isFirstTable && policyNumbers != null && policyNumbers.Count > 0;
+            // Check if any column name contains "policy" (case-insensitive)
+            bool hasPolicyColumn = dt.Columns.Cast<DataColumn>()
+                .Any(c => c.ColumnName.Contains("policy", StringComparison.OrdinalIgnoreCase));
+
+            // Determine if filtering should be applied
+            bool shouldFilter = hasPolicyColumn &&
+                                policyNumbers != null &&
+                                policyNumbers.Count > 0;
+
+            // Find the policy column index if filtering is needed
+            int policyColumnIndex = -1;
+            if (shouldFilter)
+            {
+                var policyColumn = dt.Columns.Cast<DataColumn>()
+                    .FirstOrDefault(c => c.ColumnName.Contains("policy", StringComparison.OrdinalIgnoreCase));
+                policyColumnIndex = dt.Columns.IndexOf(policyColumn);
+            }
 
             // Add data rows (skip header)
             for (int row = headerRow + 1; row <= lastRow; row++)
             {
-                string firstColumnValue = sheet[row, 1].Value?.ToString()?.Trim();
-
-                // Apply filter only to first table with policy numbers
-                if (shouldFilter)
+                // Apply filter if table has policy column and specific policies are selected
+                if (shouldFilter && policyColumnIndex >= 0)
                 {
-                    if (string.IsNullOrWhiteSpace(firstColumnValue) ||
-                        !policyNumbers.Any(p => p.Equals(firstColumnValue, StringComparison.OrdinalIgnoreCase)))
+                    string policyValue = sheet[row, policyColumnIndex + 1].Value?.ToString()?.Trim();
+
+                    if (string.IsNullOrWhiteSpace(policyValue) ||
+                        !policyNumbers.Any(p => p.Equals(policyValue, StringComparison.OrdinalIgnoreCase)))
                     {
                         continue; // Skip this row
                     }
@@ -708,41 +678,7 @@ namespace Policy_Document_Generation.Controllers
             }
 
             return dt;
-        }
-        /// <summary>
-        /// Reads Excel sheets and captures only schema information
-        /// (NO relationship inference here)
-        /// </summary>
-        private List<TableStructureInfo> AnalyzeExcelStructure(IWorkbook workbook)
-        {
-            var tables = new List<TableStructureInfo>();
-
-            foreach (IWorksheet sheet in workbook.Worksheets)
-            {
-                if (sheet.UsedRange == null || sheet.UsedRange.LastRow < 2)
-                    continue;
-
-                var tableInfo = new TableStructureInfo
-                {
-                    SheetName = sheet.Name,
-                    Columns = new List<string>()
-                };
-
-                int lastCol = sheet.UsedRange.LastColumn;
-                for (int col = 1; col <= lastCol; col++)
-                {
-                    string columnName = sheet[1, col].Value?.Trim();
-                    if (!string.IsNullOrEmpty(columnName))
-                    {
-                        tableInfo.Columns.Add(columnName);
-                    }
-                }
-                tables.Add(tableInfo);
-            }
-
-            return tables;
-        }
-
+        }       
         /// <summary>
         /// Executes mail merge based on data structure (flat, nested, or multiple tables)
         /// Maintains parent-child relationships for nested groups
@@ -754,43 +690,22 @@ namespace Policy_Document_Generation.Controllers
 
             try
             {
-                // Check if nested structure exists based on table structure analysis
-                var tableStructure = dataSet.ExtendedProperties["TableStructure"] as List<TableStructureInfo>;
-                bool hasNestedStructure = HasNestedStructure(
-                    document,
-                    dataSet,
-                    tableStructure
-                );
-
                 document.MailMerge.StartAtNewPage = true;
 
-                if (dataSet.Tables.Count > 1 && hasNestedStructure)
+                var groupNames = document.MailMerge.GetMergeGroupNames();
+
+                // Case 1: No groups in template AND single table → Simple Execute
+                if ((groupNames == null || groupNames.Length == 0) && dataSet.Tables.Count == 1)
                 {
-                    // Execute nested mail merge - maintains parent-child relationships
-                    ExecuteNestedMailMerge(document, dataSet, tableStructure);
+                    document.MailMerge.StartAtNewPage = false;
+                    document.MailMerge.Execute(dataSet.Tables[0]);
                 }
-                else if (dataSet.Tables.Count == 1)
+                // Case 2: Template has groups → ExecuteNestedGroup
+                else if (groupNames != null && groupNames.Length > 0)
                 {
-                    // Single table - use ExecuteGroup for repeating data, Execute for single record
-                    DataTable table = dataSet.Tables[0];
-                    
-                    if (table.Rows.Count > 1)
-                    {
-                        // Multiple records - use ExecuteGroup to repeat the region
-                        document.MailMerge.ExecuteGroup(table);
-                    }
-                    else
-                    {
-                        document.MailMerge.StartAtNewPage = false;
-                        // Single record - use Execute for simple field replacement
-                        document.MailMerge.Execute(table);
-                    }
+                    ExecuteNestedGroupWithSmartCommands(document, dataSet, groupNames);
                 }
-                else if (dataSet.Tables.Count > 1)
-                {
-                    // Multiple tables without nested structure - execute nested group with all tables
-                    ExecuteMultipleTablesAsNestedGroup(document, dataSet);
-                }
+                // Update document fields
                 document.UpdateDocumentFields();
             }
             catch (Exception ex)
@@ -799,125 +714,106 @@ namespace Policy_Document_Generation.Controllers
             }
         }
 
-        private bool HasNestedStructure(
-            WordDocument document,
-            DataSet dataSet,
-            List<TableStructureInfo> tableStructure)
-        {
-            var groupNames = document.MailMerge.GetMergeGroupNames();
-
-            if (groupNames == null || groupNames.Length < 2)
-                return false;
-
-            // Root group (first appearance)
-            string rootGroup = groupNames[0];
-
-            var parentTable = dataSet.Tables
-                .Cast<DataTable>()
-                .FirstOrDefault(t =>
-                    string.Equals(t.TableName, rootGroup, StringComparison.OrdinalIgnoreCase));
-
-            if (parentTable == null)
-                return false;
-
-            // Check if ANY other group can form a valid relation
-            foreach (string group in groupNames.Skip(1))
-            {
-                var childTable = dataSet.Tables
-                    .Cast<DataTable>()
-                    .FirstOrDefault(t =>
-                        string.Equals(t.TableName, group, StringComparison.OrdinalIgnoreCase));
-
-                if (childTable == null)
-                    continue;
-
-                // Inline the relation check instead of calling TryBuildRelation
-                var parentColumns = parentTable.Columns.Cast<DataColumn>()
-                    .Select(c => c.ColumnName)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                var childColumns = childTable.Columns.Cast<DataColumn>()
-                    .Select(c => c.ColumnName)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                // Find common key (e.g., PolicyNumber)
-                var commonKey = parentColumns.Intersect(childColumns).FirstOrDefault();
-
-                if (!string.IsNullOrEmpty(commonKey))
-                    return true; // ✅ Nested structure exists
-            }
-
-            return false;
-        }
         /// <summary>
-        /// Executes nested mail merge for hierarchical data structures with proper group handling
-        /// Uses ArrayList of commands to define relationships - NO DataRelations needed
+        /// Executes a nested mail merge operation using the provided document,
+        /// dataset, and group names. Builds smart commands dynamically for nested groups.
         /// </summary>
-        private void ExecuteNestedMailMerge(WordDocument document, DataSet dataSet, List<TableStructureInfo> tableStructure)
+
+        private void ExecuteNestedGroupWithSmartCommands(WordDocument document, DataSet dataSet, string[] groupNames)
         {
             try
             {
+                // List to hold dynamically built nested group command
                 ArrayList commands = new ArrayList();
 
-                var groupNames = document.MailMerge.GetMergeGroupNames();
-
-                if (groupNames == null || groupNames.Length == 0)
-                    return;
-
-                // Parent (first group)
-                string parentGroup = groupNames[0]; // ✅ Use array indexing
-                var parentTable = tableStructure.FirstOrDefault(t =>
-                    string.Equals(t.SheetName, parentGroup, StringComparison.OrdinalIgnoreCase));
-
-                if (parentTable == null)
-                    return;
-
-                commands.Add(new DictionaryEntry(parentTable.SheetName, string.Empty));
-
-                // Children (remaining groups)
-                for (int i = 1; i < groupNames.Length; i++) // ✅ Use for loop for array
+                // Simply build commands based on group names
+                // If groupNames is null/empty, commands will be empty and DocIO handles it
+                if (groupNames != null && groupNames.Length > 0)
                 {
-                    string childGroup = groupNames[i];
-
-                    var childTable = tableStructure.FirstOrDefault(t =>
-                        string.Equals(t.SheetName, childGroup, StringComparison.OrdinalIgnoreCase));
-
-                    if (childTable == null)
-                        continue;
-
-                    string relationString = BuildRelationString(dataSet, parentTable.SheetName, childTable.SheetName);
-
-                    if (!string.IsNullOrEmpty(relationString))
-                    {
-                        commands.Add(new DictionaryEntry(childTable.SheetName, relationString));
-                    }
+                    BuildNestedCommands(document, dataSet, groupNames, commands);
                 }
-
+                // Execute the nested mail merge with the generated commands
                 document.MailMerge.ExecuteNestedGroup(dataSet, commands);
             }
             catch (Exception ex)
             {
-                throw new Exception($"Nested mail merge failed: {ex.Message}", ex);
+                throw new Exception($"Error executing nested group merge: {ex.Message}", ex);
             }
         }
         /// <summary>
-        /// Builds the relation string for nested mail merge command
-        /// Format: "ChildKeyColumn = %ParentTableName.ParentKeyColumn%"
-        /// The relation references the PARENT table, not the child table
+        /// Builds nested mail merge commands dynamically based on the provided group names.
+        /// Each group represents a table in the dataset, and relationships are built sequentially.
+        /// </summary
+        private void BuildNestedCommands(WordDocument document, DataSet dataSet, string[] groupNames, ArrayList commands)
+        {
+            // Exit early if no group names provided
+            if (groupNames == null || groupNames.Length == 0)
+                return;
+            // Get the first (root) group name
+            string firstGroupName = groupNames[0];
+            // Find matching table in dataset (case-insensitive
+            var firstTable = dataSet.Tables.Cast<DataTable>()
+                .FirstOrDefault(t => string.Equals(t.TableName, firstGroupName, StringComparison.OrdinalIgnoreCase));
+            // If root table not found, log warning and stop processing
+            if (firstTable == null)
+            {
+                _logger.LogWarning($"First group '{firstGroupName}' not found in dataset.");
+                return;
+            }
+
+            // Add root parent with empty relation (like "Employees" in your example)
+            commands.Add(new DictionaryEntry(firstTable.TableName, string.Empty));
+
+            // Track current parent - changes at each level
+            string currentParentTableName = firstTable.TableName;
+
+            // Add child tables - each relates to IMMEDIATE parent (not root parent)
+            for (int i = 1; i < groupNames.Length; i++)
+            {
+                string childGroupName = groupNames[i];
+                var childTable = dataSet.Tables.Cast<DataTable>()
+                    .FirstOrDefault(t => string.Equals(t.TableName, childGroupName, StringComparison.OrdinalIgnoreCase));
+
+                if (childTable != null)
+                {
+                    // Build relation to immediate parent (previous table)
+                    // Example: Orders relates to Customers (not to Employees)
+                    string relationString = BuildRelationString(dataSet, currentParentTableName, childTable.TableName);
+
+                    commands.Add(new DictionaryEntry(childTable.TableName, relationString));
+
+                    if (string.IsNullOrEmpty(relationString))
+                    {
+                        _logger.LogInformation($"No common column found between '{currentParentTableName}' and '{childTable.TableName}'. Using empty relation.");
+                    }
+
+                    // Update parent for next iteration
+                    // Next child will relate to THIS table
+                    currentParentTableName = childTable.TableName;
+                }
+                else
+                {
+                    _logger.LogWarning($"Child group '{childGroupName}' not found in dataset.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Builds a relation string between a parent and child table based on a common column name.
+        /// This relation format is used by DocIO for nested mail merge operations.
         /// </summary>
 
-        private string BuildRelationString(
-            DataSet dataSet,
-            string parentTableName,
-            string childTableName)
+        private string BuildRelationString(DataSet dataSet, string parentTableName, string childTableName)
         {
+            // Retrieve parent and child tables
             DataTable parentTable = dataSet.Tables[parentTableName];
             DataTable childTable = dataSet.Tables[childTableName];
 
+            // Return empty if either table is missing
             if (parentTable == null || childTable == null)
                 return string.Empty;
 
-            // Find a common column between parent and child
+            // Find common column
             var parentColumns = parentTable.Columns
                 .Cast<DataColumn>()
                 .Select(c => c.ColumnName)
@@ -927,46 +823,17 @@ namespace Policy_Document_Generation.Controllers
                 .Cast<DataColumn>()
                 .Select(c => c.ColumnName)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
+            // Find the first common column between parent and child
             var commonKey = parentColumns
                 .Intersect(childColumns)
                 .FirstOrDefault();
-
+            // If no common column found, return empty relation
             if (commonKey == null)
                 return string.Empty;
 
-            // Correct DocIO relation format
+            // DocIO relation format
             return $"{commonKey} = %{parentTableName}.{commonKey}%";
         }
-
-
-        /// <summary>
-        /// Executes mail merge for multiple independent tables using ExecuteNestedGroup
-        /// Even without explicit parent-child relationships, ExecuteNestedGroup handles multiple tables
-        /// </summary>
-        private void ExecuteMultipleTablesAsNestedGroup(WordDocument document, DataSet dataSet)
-        {
-            try
-            {
-                ArrayList commands = new ArrayList();
-
-                // Add all tables to commands with empty relation strings
-                // This allows ExecuteNestedGroup to handle multiple independent merge regions
-                foreach (DataTable table in dataSet.Tables)
-                {
-                    DictionaryEntry command = new DictionaryEntry(table.TableName, string.Empty);
-                    commands.Add(command);
-                }
-
-                // Execute nested group - works for both related and independent tables
-                document.MailMerge.ExecuteNestedGroup(dataSet, commands);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Error executing nested group merge: {ex.Message}", ex);
-            }
-        }
-
         /// <summary>
         /// Retrieves a Word document stream from the uploaded file or a default template.
         /// </summary>
@@ -977,7 +844,7 @@ namespace Policy_Document_Generation.Controllers
             if (file != null && file.Length > 0)
             {
                 string extension = Path.GetExtension(file.FileName).ToLower();
-                string[] supportedExtensions = { ".doc", ".docx", ".dot", ".dotx", ".dotm", ".docm", ".xml", ".rtf" };
+                string[] supportedExtensions = { ".doc", ".docx", ".dot", ".dotx", ".dotm", ".docm", ".xml", ".rtf", ".html", ".md" };
                 // Validate the file extension
                 if (supportedExtensions.Contains(extension))
                 {
@@ -1048,13 +915,6 @@ namespace Policy_Document_Generation.Controllers
         {
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
-
-        public class TableStructureInfo
-        {
-            public string SheetName { get; set; }
-            public List<string> Columns { get; set; } = new List<string>();
-        }
-
     }
 
 }
