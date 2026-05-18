@@ -1,6 +1,6 @@
 # Syncfusion ASP.NET Core – Policy Document Generation Demo
 
-This repository contains a complete showcase sample demonstrating how to build an **Automated Policy Document Generation System** using **Syncfusion DocIO** and **Syncfusion Excel** libraries in an ASP.NET Core MVC application. The sample illustrates how insurance professionals can streamline policy document creation by merging Excel data with Word templates, supporting both single and bulk document generation with mail merge capabilities.
+This repository contains a complete showcase sample demonstrating how to build an **Automated Policy Document Generation System** using **Syncfusion DocIO** and **Syncfusion Excel** , **Syncfusion PDF** and **Syncfusion Smart Data Extractor** libraries in an ASP.NET Core MVC application. The sample illustrates how insurance professionals can streamline policy document creation by merging Excel data with Word templates, supporting both single and bulk document generation with mail merge capabilities.
 
 ---
 
@@ -94,7 +94,11 @@ https://localhost:5001
 5. **Configure Extra Features**
    - **Multi-part Document** – Add cover page & table of contents
    - **Separate Files** – Generate individual files per policy (ZIP archive)
-   - **Insert Documents Based on Placeholder Text** – Embed additional documents at specific text locations
+   - **Insert Documents** – Embed additional documents at specific locations
+   - **Digital Signature** *(PDF only)* 
+     - Upload your signature image (PNG, JPG, etc.)
+     - Enter keywords where you want signatures placed (e.g., "Signature, WITNESS")
+     - Signatures will automatically appear above those keywords in the PDF
 
 6. **Generate Documents**
    - Click "Generate Documents" button
@@ -123,6 +127,7 @@ https://localhost:5001
 - [Word to PDF Conversion](https://help.syncfusion.com/document-processing/word/conversions/word-to-pdf/overview)
 - [Find and Replace](https://help.syncfusion.com/document-processing/word/word-library/net/working-with-find-and-replace)
 - [Work with Bookmarks](https://help.syncfusion.com/document-processing/word/word-library/net/working-with-bookmarks)
+- [Smart Data Extractor](https://help.syncfusion.com/document-processing/data-extraction/smart-data-extractor/overview)
 
 ---
 

@@ -61,5 +61,30 @@ namespace Policy_Document_Generation.Models
         [Display(Name = "Bookmark Documents")]
         public IFormFileCollection BookmarkDocuments { get; set; }
 
+        /// <summary>
+        /// Enable digital signatures on generated PDF documents
+        /// Only applies when Output Format is set to PDF
+        /// </summary>
+        [Display(Name = "Enable Digital Signature")]
+        public bool EnableDigitalSign { get; set; }
+
+        /// <summary>
+        /// Signature image file to be inserted into PDF documents
+        /// Supported formats: PNG, JPG, JPEG, GIF, BMP
+        /// Required when EnableDigitalSign is true
+        /// </summary>
+        [Display(Name = "Signature Image")]
+        public IFormFile SignatureImage { get; set; }
+
+        /// <summary>
+        /// Comma-separated keywords to identify signature placement locations in the document
+        /// Example: "Sign, WITNESS, AuthorizedSign, Signature"
+        /// Signatures will be placed above these keywords in the PDF document
+        /// Default: "Sign, WITNESS, AuthorizedSign"
+        /// </summary>
+        [Display(Name = "Signature Keywords")]
+        public string SignatureKeywords { get; set; } = "Sign, WITNESS, CompanySignature";
+
+
     }
 }

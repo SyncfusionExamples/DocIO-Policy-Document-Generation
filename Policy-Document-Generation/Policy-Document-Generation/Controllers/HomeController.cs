@@ -1,14 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Hosting.Internal;
 using Policy_Document_Generation.Models;
 using Syncfusion.DocIO;
 using Syncfusion.DocIO.DLS;
 using Syncfusion.Drawing;
+using Syncfusion.Pdf;
+using Syncfusion.Pdf.Graphics;
+using Syncfusion.Pdf.Parsing;
+using Syncfusion.Pdf.Security;
+using Syncfusion.SmartDataExtractor;
 using Syncfusion.XlsIO;
 using System.Collections;
 using System.Data;
 using System.Diagnostics;
-using System.Reflection;
+using System.IO.Compression;
 
 namespace Policy_Document_Generation.Controllers
 {
@@ -43,11 +47,8 @@ namespace Policy_Document_Generation.Controllers
                 // Step 2: Parse policy numbers from user input (specific mode)
                 List<string> policyNumbersList = ParsePolicyNumbers(model);
 
-                // Step 3: Determine filtering strategy
-                bool needsFiltering = model.SelectionMode == "specific" && policyNumbersList.Count > 0;
-
                 // Step 4: Create DataSet (filter during read if specific policies selected)
-                DataSet dataSet = CreateMailMergeDataSet(excelStream, needsFiltering ? policyNumbersList : null);
+                DataSet dataSet = CreateMailMergeDataSet(excelStream, policyNumbersList);
 
                 if (dataSet.Tables.Count == 0 || dataSet.Tables[0].Rows.Count == 0)
                 {
@@ -58,7 +59,6 @@ namespace Policy_Document_Generation.Controllers
                 // Step 5: For "all with separate files" - extract policy numbers from DataTable
                 if (model.SelectionMode == "all" && model.GenerateSeparateFiles)
                 {
-                    // Extract from first column of first table (already in memory)
                     policyNumbersList = dataSet.Tables[0].AsEnumerable()
                         .Select(row => row[0]?.ToString()?.Trim())
                         .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -66,16 +66,8 @@ namespace Policy_Document_Generation.Controllers
                         .ToList();
                 }
 
-                // Step 6: Generate separate or single document
-                if (model.GenerateSeparateFiles && policyNumbersList.Count > 1)
-                {
-                    // Pass the already-created DataSet, not excelStream
-                    return GenerateSeparateDocuments(documentStream, dataSet, excelStream, policyNumbersList, model);
-                }
-                else
-                {
-                    return GenerateSingleDocument(documentStream, dataSet, excelStream, policyNumbersList, model);
-                }
+                // Step 6: Generate documents using unified method
+                return CreateDocuments(documentStream, dataSet, policyNumbersList, model);
             }
             catch (Exception ex)
             {
@@ -83,7 +75,135 @@ namespace Policy_Document_Generation.Controllers
                 return RedirectToAction("Index");
             }
         }
+        /// <summary>
+        /// Unified document generation method supporting both single and multiple file outputs.
+        /// Performs mail merge once, then either returns single file or splits by page breaks into ZIP.
+        /// </summary>
+        private IActionResult CreateDocuments(Stream documentStream, DataSet dataSet, List<string> policyNumbers, ReportDataViewModel model)
+        {
+            try
+            {
+                if (dataSet.Tables.Count == 0 || dataSet.Tables[0].Rows.Count == 0)
+                {
+                    TempData["Error"] = "No data found for the selected policy numbers.";
+                    return RedirectToAction("Index");
+                }
 
+                bool isPdf = model.OutputFormat?.ToLower() == "pdf";
+                string fileExtension = isPdf ? "pdf" : "docx";
+
+                using (WordDocument document = new WordDocument(documentStream, FormatType.Docx))
+                {
+                    // Execute mail merge once with all data
+                    ExecuteMailMerge(document, dataSet);
+
+                    // Insert bookmark documents if enabled
+                    if (model.UseBookmarkDocuments && model.BookmarkDocuments != null && model.BookmarkDocuments.Count > 0)
+                    {
+                        InsertPlaceholderDocuments(document, model);
+                    }
+
+                    if (model.GenerateSeparateFiles && policyNumbers.Count > 1)
+                    {
+                        // Split into multiple documents
+                        byte[] zipBytes = SplitDocumentByPageBreaks(
+                            document,
+                            policyNumbers,
+                            isPdf,
+                            fileExtension,
+                            model.MultiPartDocument,
+                            model.SignatureImage,
+                            model.SignatureKeywords,
+                            model.EnableDigitalSign);
+
+                        if (zipBytes != null && zipBytes.Length > 0)
+                        {
+                            // Return ZIP file with all separated documents (signatures already applied)
+                            return File(zipBytes, "application/zip",
+                                $"Policy_Documents_{DateTime.Now:yyyyMMdd_HHmmss}.zip");
+                        }
+                        else
+                        {
+                            // Fallback: return as single document if split fails
+                            TempData["Warning"] = "Unable to split documents. Returning as single file.";
+                            using (MemoryStream outputStream = new MemoryStream())
+                            {
+                                SaveDocumentToStream(document, outputStream, isPdf);
+
+                                // Apply digital signatures if enabled and PDF format
+                                if (isPdf && model.EnableDigitalSign)
+                                {
+                                    outputStream.Position = 0;
+                                    using (MemoryStream signedStream = ApplyDigitalSignatureIfEnabled(
+                                        outputStream,
+                                        model.SignatureImage,
+                                        model.SignatureKeywords,
+                                        true))
+                                    {
+                                        return File(signedStream.ToArray(),
+                                            isPdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            $"Policy_Documents.{fileExtension}");
+                                    }
+                                }
+                                else
+                                {
+                                    return File(outputStream.ToArray(),
+                                        isPdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                        $"Policy_Documents.{fileExtension}");
+                                }
+                            }
+                        }
+                    }
+                    // OUTPUT: Single merged document
+                    else
+                    {
+                        if (model.MultiPartDocument)
+                        {
+                            AddCoverPage(document);
+                        }
+
+                        using (MemoryStream outputStream = new MemoryStream())
+                        {
+                            SaveDocumentToStream(document, outputStream, isPdf);
+                            // Apply digital signatures if enabled and PDF format
+                            if (isPdf && model.EnableDigitalSign)
+                            {
+                                outputStream.Position = 0;
+                                using (MemoryStream signedStream = ApplyDigitalSignatureIfEnabled(
+                                    outputStream,
+                                    model.SignatureImage,
+                                    model.SignatureKeywords,
+                                    true))
+                                {
+                                    string fileName = policyNumbers.Count == 1
+                                        ? $"Policy_{policyNumbers[0]}.pdf"
+                                        : $"Policies_{policyNumbers.Count}_Documents.pdf";
+
+                                    return File(signedStream.ToArray(), "application/pdf", fileName);
+                                }
+                            }
+                            else
+                            {
+                                string fileName = policyNumbers.Count == 1
+                                    ? $"Policy_{policyNumbers[0]}.{fileExtension}"
+                                    : $"Policies_{policyNumbers.Count}_Documents.{fileExtension}";
+
+                                string mimeType = isPdf
+                                    ? "application/pdf"
+                                    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+                                return File(outputStream.ToArray(), mimeType, fileName);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Error generating documents: {ex.Message}";
+                return RedirectToAction("Index");
+            }
+        }
         /// <summary>
         /// Parses policy numbers from the model based on selection mode
         /// </summary>
@@ -113,41 +233,6 @@ namespace Policy_Document_Generation.Controllers
             return policyNumbers;
         }       
         /// <summary>
-        /// Generates a single document containing all selected policies.
-        /// If an additional document type is selected, both are returned as a ZIP archive.
-        /// Supports both DOCX and PDF output formats.
-        /// </summary>
-        private IActionResult GenerateSingleDocument(Stream documentStream, DataSet dataSet, Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
-        {
-            try
-            {
-                if (dataSet.Tables.Count == 0 || dataSet.Tables[0].Rows.Count == 0)
-                {
-                    TempData["Error"] = "No data found for the selected policy numbers.";
-                    return RedirectToAction("Index");
-                }
-
-                bool isPdf = model.OutputFormat?.ToLower() == "pdf";
-                string fileExtension = isPdf ? "pdf" : "docx";
-                string baseName = policyNumbers.Count == 1 ? $"Policy_{policyNumbers[0]}" : $"Policies_{policyNumbers.Count}_Documents";
-
-                // Generate main policy document
-                byte[] mainDocBytes = GenerateDocumentBytes(documentStream, dataSet, model, isPdf);
-
-                // Return the document directly
-                string mimeType = isPdf ? "application/pdf"
-                    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-                return File(mainDocBytes, mimeType, $"{baseName}.{fileExtension}");
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = $"Error generating document: {ex.Message}";
-                return RedirectToAction("Index");
-            }
-        }
-
-        /// <summary>
         /// Performs mail merge on a Word template stream and returns the result as a byte array.
         /// Applies MultiPartDocument cover page and PDF conversion based on model settings.
         /// </summary>
@@ -160,12 +245,12 @@ namespace Policy_Document_Generation.Controllers
                 // Insert documents at bookmark locations after mail merge
                 if (model.UseBookmarkDocuments && model.BookmarkDocuments != null && model.BookmarkDocuments.Count > 0)
                 {
-                    InsertBookmarkDocuments(document, model);
+                    InsertPlaceholderDocuments(document, model);
                 }
 
                 if (model.MultiPartDocument)
                 {
-                    AddCoverPageAndTOC(document);
+                    AddCoverPage(document);
                 }
 
                 using (MemoryStream outputStream = new MemoryStream())
@@ -192,12 +277,12 @@ namespace Policy_Document_Generation.Controllers
         /// Inserts documents by finding text in main document, creating bookmark, then inserting content
         /// Document file names are used to search for matching text in the document
         /// </summary>
-        private void InsertBookmarkDocuments(WordDocument document, ReportDataViewModel model)
+        private void InsertPlaceholderDocuments(WordDocument document, ReportDataViewModel model)
         {
             if (!model.UseBookmarkDocuments || model.BookmarkDocuments == null || model.BookmarkDocuments.Count == 0)
                 return;
 
-            foreach (var bookmarkDocFile in model.BookmarkDocuments)
+            foreach (IFormFile bookmarkDocFile in model.BookmarkDocuments)
             {
                 if (bookmarkDocFile.Length == 0)
                     continue;
@@ -242,7 +327,7 @@ namespace Policy_Document_Generation.Controllers
                         _logger.LogInformation($"Created bookmark '{bookmarkName}' after text '{searchText}' (Occurrence {i + 1})");
 
                         // Insert document content at the bookmark
-                        using (var ms = new MemoryStream())
+                        using (MemoryStream ms = new MemoryStream())
                         {
                             bookmarkDocFile.CopyTo(ms);
                             ms.Position = 0;
@@ -265,98 +350,15 @@ namespace Policy_Document_Generation.Controllers
             using (WordDocument bookmarkDoc = new WordDocument(documentStream, FormatType.Automatic))
             {
                 // Create TextBodyPart from bookmark document
-                TextBodyPart bodyPart = new TextBodyPart(bookmarkDoc);
-
-                // Extract all content from bookmark document
-                foreach (IWSection section in bookmarkDoc.Sections)
-                {
-                    foreach (IEntity entity in section.Body.ChildEntities)
-                    {
-                        bodyPart.BodyItems.Add(entity.Clone());
-                    }
-                }
-
+                WordDocumentPart wordDocumentPart = new WordDocumentPart(bookmarkDoc);
                 // Navigate to bookmark and insert content
                 BookmarksNavigator navigator = new BookmarksNavigator(mainDoc);
                 navigator.MoveToBookmark(bookmarkName, true, true);
-                navigator.ReplaceBookmarkContent(bodyPart);
+                navigator.ReplaceContent(wordDocumentPart);
 
                 _logger.LogInformation($"Successfully inserted document content at bookmark '{bookmarkName}'");
             }
-        }
-
-        /// <summary>
-        /// OPTIMIZED: Generates separate documents using merge-once-then-split strategy.
-        /// This approach is simpler, faster, and easier to understand:
-        /// 1. Reads Excel once and creates DataSet
-        /// 2. Performs mail merge once with ALL data (each record starts on new page)
-        /// 3. Splits the merged document by page breaks
-        /// 4. Returns ZIP archive with separate files
-        /// </summary>
-        private IActionResult GenerateSeparateDocuments(Stream documentStream, DataSet dataSet,Stream excelStream, List<string> policyNumbers, ReportDataViewModel model)
-        {
-            try
-            {
-                bool isPdf = model.OutputFormat?.ToLower() == "pdf";
-                string fileExtension = isPdf ? "pdf" : "docx";
-
-                using (MemoryStream zipStream = new MemoryStream())
-                {
-                    using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create, true))
-                    {
-                        // Step 2: Generate main policy documents (merge once, split by page breaks)
-                        byte[] docsZip = GenerateDocumentsWithPageBreakSplit(
-                            documentStream, dataSet, policyNumbers, model, isPdf, fileExtension);
-
-                        // Step 3: Add main documents to final ZIP
-                        AddZipContentsToArchive(docsZip, archive);                      
-                    }
-
-                    zipStream.Position = 0;
-                    return File(zipStream.ToArray(), "application/zip", 
-                        $"Policy_Documents_{DateTime.Now:yyyyMMdd_HHmmss}.zip");
-                }
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = $"Error generating separate documents: {ex.Message}";
-                return RedirectToAction("Index");
-            }
-        }
-
-        /// <summary>
-        /// CORE OPTIMIZATION: Merge once with all data, then split by page breaks.
-        /// This is much simpler and faster than filtering and merging multiple times.
-        /// Returns ZIP bytes containing separate documents for each policy.
-        /// </summary>
-        private byte[] GenerateDocumentsWithPageBreakSplit(
-            Stream templateStream,
-            DataSet dataSet,
-            List<string> policyNumbers,
-            ReportDataViewModel model,
-            bool isPdf,
-            string fileExtension,
-            string fileNameSuffix = "")
-        {
-            using (WordDocument document = new WordDocument(templateStream, FormatType.Automatic))
-            {
-                // KEY: Ensure each record starts on a new page (creates page breaks automatically)
-                document.MailMerge.StartAtNewPage = true;
-
-                // Execute mail merge ONCE with all data
-                ExecuteMailMerge(document, dataSet);
-
-                // Insert documents at bookmark locations after mail merge
-                if (model.UseBookmarkDocuments && model.BookmarkDocuments != null && model.BookmarkDocuments.Count > 0)
-                {
-                    InsertBookmarkDocuments(document, model);
-                }
-
-                // Split the merged document by page breaks and return as ZIP
-                return SplitDocumentByPageBreaks(document, policyNumbers, isPdf, fileExtension, fileNameSuffix, model.MultiPartDocument);
-            }
-        }
-
+        }           
         /// <summary>
         /// Splits a merged document into separate files using page breaks as boundaries.
         /// Uses bookmark navigation to extract content between page breaks.
@@ -367,8 +369,10 @@ namespace Policy_Document_Generation.Controllers
             List<string> policyNumbers,
             bool convertToPdf,
             string fileExtension,
-            string fileNameSuffix,
-             bool addCoverPage = false)
+            bool addCoverPage = false,
+            IFormFile signatureImage = null,
+            string signatureKeywords = null,
+            bool enableDigitalSign = false)
         {
             // Step 1: Find all page breaks in the document
             List<Entity> pageBreaks = document.FindAllItemsByProperty(
@@ -409,17 +413,15 @@ namespace Policy_Document_Generation.Controllers
             // Step 5: Extract each section and create ZIP archive
             using (MemoryStream zipStream = new MemoryStream())
             {
-                using (var archive = new System.IO.Compression.ZipArchive(
+                using (System.IO.Compression.ZipArchive archive = new System.IO.Compression.ZipArchive(
                     zipStream, System.IO.Compression.ZipArchiveMode.Create, true))
                 {
                     for (int i = 1; i <= bookmarkIndex && i <= policyNumbers.Count; i++)
                     {
                         string policyNumber = policyNumbers[i - 1];
-                        
-                        // Build filename: "Policy_12345.pdf" or "Policy_12345_ClaimsLetter.pdf"
-                        string fileName = string.IsNullOrEmpty(fileNameSuffix)
-                            ? $"Policy_{policyNumber}.{fileExtension}"
-                            : $"Policy_{policyNumber}_{fileNameSuffix}.{fileExtension}";
+
+                        // Build filename: "Policy_12345.pdf"
+                        string fileName = $"Policy_{policyNumber}.{fileExtension}";
 
                         try
                         {
@@ -430,19 +432,54 @@ namespace Policy_Document_Generation.Controllers
 
                             if (documentPart == null) continue;
 
-                            // Save extracted section as separate file
+                            // Extract content as new WordDocument
                             using (WordDocument extractedDoc = documentPart.GetAsWordDocument())
-                            using (MemoryStream docStream = new MemoryStream())
                             {
-                                if(addCoverPage)
-                                    AddCoverPageAndTOC(extractedDoc);
-                                SaveDocumentToStream(extractedDoc, docStream, convertToPdf);
-                                docStream.Position = 0;
-
-                                var zipEntry = archive.CreateEntry(fileName);
-                                using (var entryStream = zipEntry.Open())
+                                if (addCoverPage)
                                 {
-                                    docStream.CopyTo(entryStream);
+                                    AddCoverPage(extractedDoc);
+                                }
+
+                                if (convertToPdf)
+                                {
+                                    // Convert to PDF
+                                    using (Syncfusion.DocIORenderer.DocIORenderer renderer = new Syncfusion.DocIORenderer.DocIORenderer())
+                                    using (Syncfusion.Pdf.PdfDocument pdfDocument = renderer.ConvertToPDF(extractedDoc))
+                                    using (MemoryStream pdfStream = new MemoryStream())
+                                    {
+                                        pdfDocument.Save(pdfStream);
+                                        pdfDocument.Close();
+                                        pdfStream.Position = 0;
+
+                                        // Apply digital signatures to each PDF if enabled
+                                        using (MemoryStream signedPdfStream = ApplyDigitalSignatureIfEnabled(
+                                            pdfStream, signatureImage, signatureKeywords, enableDigitalSign))
+                                        {
+                                            // Add signed PDF to ZIP
+                                            ZipArchiveEntry entry = archive.CreateEntry(fileName, System.IO.Compression.CompressionLevel.Fastest);
+                                            using (Stream entryStream = entry.Open())
+                                            {
+                                                signedPdfStream.Position = 0;
+                                                signedPdfStream.CopyTo(entryStream);
+                                            }
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    // Save as Word document
+                                    using (MemoryStream docStream = new MemoryStream())
+                                    {
+                                        extractedDoc.Save(docStream, FormatType.Docx);
+                                        docStream.Position = 0;
+
+                                        // Add Word document to ZIP
+                                        ZipArchiveEntry entry = archive.CreateEntry(fileName, System.IO.Compression.CompressionLevel.Fastest);
+                                        using (Stream entryStream = entry.Open())
+                                        {
+                                            docStream.CopyTo(entryStream);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -464,14 +501,14 @@ namespace Policy_Document_Generation.Controllers
         private void AddZipContentsToArchive(byte[] zipBytes, System.IO.Compression.ZipArchive targetArchive)
         {
             using (MemoryStream zipStream = new MemoryStream(zipBytes))
-            using (var sourceArchive = new System.IO.Compression.ZipArchive(
+            using (System.IO.Compression.ZipArchive sourceArchive = new System.IO.Compression.ZipArchive(
                 zipStream, System.IO.Compression.ZipArchiveMode.Read))
             {
-                foreach (var entry in sourceArchive.Entries)
+                foreach (ZipArchiveEntry entry in sourceArchive.Entries)
                 {
-                    var newEntry = targetArchive.CreateEntry(entry.FullName);
-                    using (var sourceStream = entry.Open())
-                    using (var targetStream = newEntry.Open())
+                    ZipArchiveEntry newEntry = targetArchive.CreateEntry(entry.FullName);
+                    using (Stream sourceStream = entry.Open())
+                    using (Stream targetStream = newEntry.Open())
                     {
                         sourceStream.CopyTo(targetStream);
                     }
@@ -501,7 +538,7 @@ namespace Policy_Document_Generation.Controllers
         /// <summary>
         /// Adds cover page and table of contents to the document
         /// </summary>
-        private void AddCoverPageAndTOC(WordDocument document)
+        private void AddCoverPage(WordDocument document)
         {
             WSection firstSection = document.Sections[0].Clone();
             firstSection.Body.ChildEntities.Clear();
@@ -635,29 +672,18 @@ namespace Policy_Document_Generation.Controllers
                 dt.Columns.Add(columnName);
             }
 
-            // Check if any column name contains "policy" (case-insensitive)
-            bool hasPolicyColumn = dt.Columns.Cast<DataColumn>()
-                .Any(c => c.ColumnName.Contains("policy", StringComparison.OrdinalIgnoreCase));
+            // Find policy column using case-insensitive comparison (handles PolicyNumber, Policy Number, policy_number, etc.)
+            DataColumn policyColumn = dt.Columns.Cast<DataColumn>()
+                .FirstOrDefault(c => c.ColumnName.Replace(" ", "").Replace("_", "").Equals("policynumber", StringComparison.OrdinalIgnoreCase));
 
-            // Determine if filtering should be applied
-            bool shouldFilter = hasPolicyColumn &&
-                                policyNumbers != null &&
-                                policyNumbers.Count > 0;
-
-            // Find the policy column index if filtering is needed
-            int policyColumnIndex = -1;
-            if (shouldFilter)
-            {
-                var policyColumn = dt.Columns.Cast<DataColumn>()
-                    .FirstOrDefault(c => c.ColumnName.Contains("policy", StringComparison.OrdinalIgnoreCase));
-                policyColumnIndex = dt.Columns.IndexOf(policyColumn);
-            }
+            bool shouldFilter = policyColumn != null && policyNumbers != null && policyNumbers.Count > 0;
+            int policyColumnIndex = shouldFilter ? dt.Columns.IndexOf(policyColumn) : -1;
 
             // Add data rows (skip header)
             for (int row = headerRow + 1; row <= lastRow; row++)
             {
-                // Apply filter if table has policy column and specific policies are selected
-                if (shouldFilter && policyColumnIndex >= 0)
+                // Apply filter if needed
+                if (shouldFilter)
                 {
                     string policyValue = sheet[row, policyColumnIndex + 1].Value?.ToString()?.Trim();
 
@@ -692,12 +718,11 @@ namespace Policy_Document_Generation.Controllers
             {
                 document.MailMerge.StartAtNewPage = true;
 
-                var groupNames = document.MailMerge.GetMergeGroupNames();
+                string[] groupNames = document.MailMerge.GetMergeGroupNames();
 
                 // Case 1: No groups in template AND single table → Simple Execute
                 if ((groupNames == null || groupNames.Length == 0) && dataSet.Tables.Count == 1)
                 {
-                    document.MailMerge.StartAtNewPage = false;
                     document.MailMerge.Execute(dataSet.Tables[0]);
                 }
                 // Case 2: Template has groups → ExecuteNestedGroup
@@ -727,11 +752,9 @@ namespace Policy_Document_Generation.Controllers
                 ArrayList commands = new ArrayList();
 
                 // Simply build commands based on group names
-                // If groupNames is null/empty, commands will be empty and DocIO handles it
-                if (groupNames != null && groupNames.Length > 0)
-                {
-                    BuildNestedCommands(document, dataSet, groupNames, commands);
-                }
+                // If groupNames is null/empty, commands will be empty and DocIO handles it            
+                BuildNestedCommands(document, dataSet, groupNames, commands);
+                
                 // Execute the nested mail merge with the generated commands
                 document.MailMerge.ExecuteNestedGroup(dataSet, commands);
             }
@@ -752,7 +775,7 @@ namespace Policy_Document_Generation.Controllers
             // Get the first (root) group name
             string firstGroupName = groupNames[0];
             // Find matching table in dataset (case-insensitive
-            var firstTable = dataSet.Tables.Cast<DataTable>()
+            DataTable firstTable = dataSet.Tables.Cast<DataTable>()
                 .FirstOrDefault(t => string.Equals(t.TableName, firstGroupName, StringComparison.OrdinalIgnoreCase));
             // If root table not found, log warning and stop processing
             if (firstTable == null)
@@ -771,7 +794,7 @@ namespace Policy_Document_Generation.Controllers
             for (int i = 1; i < groupNames.Length; i++)
             {
                 string childGroupName = groupNames[i];
-                var childTable = dataSet.Tables.Cast<DataTable>()
+                DataTable childTable = dataSet.Tables.Cast<DataTable>()
                     .FirstOrDefault(t => string.Equals(t.TableName, childGroupName, StringComparison.OrdinalIgnoreCase));
 
                 if (childTable != null)
@@ -814,17 +837,17 @@ namespace Policy_Document_Generation.Controllers
                 return string.Empty;
 
             // Find common column
-            var parentColumns = parentTable.Columns
+            HashSet<string> parentColumns = parentTable.Columns
                 .Cast<DataColumn>()
                 .Select(c => c.ColumnName)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            var childColumns = childTable.Columns
+            HashSet<string> childColumns = childTable.Columns
                 .Cast<DataColumn>()
                 .Select(c => c.ColumnName)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             // Find the first common column between parent and child
-            var commonKey = parentColumns
+            string commonKey = parentColumns
                 .Intersect(childColumns)
                 .FirstOrDefault();
             // If no common column found, return empty relation
@@ -835,9 +858,156 @@ namespace Policy_Document_Generation.Controllers
             return $"{commonKey} = %{parentTableName}.{commonKey}%";
         }
         /// <summary>
+        /// Conditionally applies digital signatures to PDF based on enableDigitalSign flag
+        /// Returns PDF stream directly if signature is not needed for optimal performance
+        /// </summary>
+        private MemoryStream ApplyDigitalSignatureIfEnabled(MemoryStream inputStream, IFormFile signatureImage, string signatureKeywordsInput, bool enableDigitalSign)
+        {
+            Stream signatureStream = null;
+            try
+            {
+                // Step 1: Early exit if digital signature is not enabled - return PDF stream directly
+                if (!enableDigitalSign)
+                {
+                    _logger.LogInformation("Digital signature is not enabled. Returning PDF stream directly.");
+                    inputStream.Position = 0;
+                    return inputStream;
+                }
+                // Step 2: Check if signature image is available
+                signatureStream = GetSignatureImageStream(signatureImage);
+                if (signatureStream == null)
+                {
+                    _logger.LogWarning("Digital signature enabled but no signature image found. Returning PDF stream directly.");
+                    inputStream.Position = 0;
+                    return inputStream;
+                }
+                // Step 3: Only use ApplyDigitalSignatureIfEnabled when signature is actually needed
+                _logger.LogInformation("Applying digital signatures using ApplyDigitalSignatureIfEnabled.");
+                // Initialize the extractor with required detection settings
+                var extractor = new DataExtractor { EnableFormDetection = false, EnableTableDetection = true, ConfidenceThreshold = 0.6 };
+                // Extract PDF document from the input stream
+                inputStream.Position = 0;
+                PdfLoadedDocument PDFdocument = extractor.ExtractDataAsPdfDocument(inputStream);
+                // Step 4: Apply signatures
+                AddSignaturesToPDFDocument(PDFdocument, signatureStream, signatureKeywordsInput);
+                // Step 5: Save PDF with signatures
+                var outputMs = new MemoryStream();
+                PDFdocument.Save(outputMs);
+                PDFdocument.Close(true);
+                outputMs.Position = 0;
+                return outputMs;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing PDF document");
+                throw;
+            }
+            finally
+            {
+                // Clean up signature stream
+                signatureStream?.Dispose();
+            }
+        }
+        /// <summary>
+        /// Adds digital signatures to PDF document at locations matching specified keywords
+        /// </summary>
+        private void AddSignaturesToPDFDocument(PdfLoadedDocument PDFdocument, Stream signatureImageStream, string keywords)
+        {
+            // Use default keywords if none are provided
+            string[] signatureKeywords = string.IsNullOrWhiteSpace(keywords)
+                ? new[] { "Sign", "WITNESS", "CompanySignature" }
+                : keywords.Split(',').Select(k => k.Trim()).ToArray();
+
+            _logger.LogInformation($"Applying digital signatures for keywords: {string.Join(", ", signatureKeywords)}");
+
+            // Iterate through each page in the document
+            for (int pageIndex = 0; pageIndex < PDFdocument.Pages.Count; pageIndex++)
+            {
+                PdfPageBase page = PDFdocument.Pages[pageIndex];
+                TextLineCollection textLines;
+
+                // Extract text lines from the page
+                page.ExtractText(out textLines);
+
+                // Iterate through each word on the page
+                foreach (TextLine line in textLines.TextLine)
+                {
+                    foreach (TextWord word in line.WordCollection)
+                    {
+                        // Skip words that do not match any signature keyword
+                        if (!signatureKeywords.Any(k => word.Text.Contains(k, StringComparison.Ordinal)))
+                            continue;
+                        // Calculate signature position above the keyword
+                        RectangleF bounds = word.Bounds;
+                        float signatureX = bounds.X;
+                        float signatureY = bounds.Y - bounds.Height - 10;
+                        float signatureWidth = 80;
+                        float signatureHeight = 20;
+                        try
+                        {
+                            // Load digital certificate
+                            using System.IO.FileStream cert = new System.IO.FileStream(Path.GetFullPath("PDF.pfx"), System.IO.FileMode.Open, System.IO.FileAccess.Read);
+                            PdfCertificate pdfCert = new PdfCertificate(cert, "syncfusion");
+
+                            // Create and configure the PDF signature
+                            PdfSignature signature = new PdfSignature(PDFdocument, page, pdfCert, "Signature");
+                            signature.Bounds = new RectangleF(signatureX, signatureY, signatureWidth, signatureHeight);
+
+                            // Load signature image directly from stream
+                            signatureImageStream.Position = 0; // Reset stream position for each use
+                            PdfBitmap signatureImageBitmap = new PdfBitmap(signatureImageStream);
+                            signature.Appearance.Normal.Graphics.DrawImage(signatureImageBitmap, 0, 0, signatureWidth, signatureHeight);
+
+                            _logger.LogDebug($"Signature added at page {pageIndex + 1}, position ({signatureX}, {signatureY})");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"Error adding signature at page {pageIndex + 1}");
+                        }
+                    }
+                }
+            }
+        }
+        /// <summary>
+        /// Gets signature image as a stream from user upload or default signature
+        /// </summary>
+        private Stream GetSignatureImageStream(IFormFile signatureImage)
+        {
+            // If user provided an image, return its stream
+            if (signatureImage != null && signatureImage.Length > 0)
+            {
+                _logger.LogInformation("Using user-provided signature image stream.");
+                var memoryStream = new MemoryStream();
+                signatureImage.OpenReadStream().CopyTo(memoryStream);
+                memoryStream.Position = 0;
+                return memoryStream;
+            }
+            // No user image - use default signature from project
+            string defaultImagePath = Path.Combine(_hostingEnvironment.ContentRootPath, "Signature.png");
+            if (System.IO.File.Exists(defaultImagePath))
+            {
+                _logger.LogInformation($"Using default signature image from: {defaultImagePath}");
+                try
+                {
+                    var fileStream = new FileStream(defaultImagePath, FileMode.Open, FileAccess.Read);
+                    var memoryStream = new MemoryStream();
+                    fileStream.CopyTo(memoryStream);
+                    fileStream.Dispose();
+                    memoryStream.Position = 0;
+                    return memoryStream;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error loading default signature image: {defaultImagePath}");
+                    return null;
+                }
+            }
+            _logger.LogWarning($"Default signature image not found at: {defaultImagePath}");
+            return null;
+        }
+        /// <summary>
         /// Retrieves a Word document stream from the uploaded file or a default template.
         /// </summary>
-
         private Stream GetWordDocument(IFormFile file)
         {
             // Case 1: Uploaded file exists and has content

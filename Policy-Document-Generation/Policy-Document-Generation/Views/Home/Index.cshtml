@@ -574,6 +574,53 @@
         font-weight: 600;
         margin-top: 12px;
     }
+    /* Digital Signature Styles */
+    .signature-section {
+        background: #fff3cd;
+        border: 2px solid #ffc107;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+        display: none;
+    }
+
+        .signature-section.visible {
+            display: block;
+        }
+
+    .signature-title {
+        font-weight: 600;
+        color: #856404;
+        margin-bottom: 15px;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .text-input {
+        width: 100%;
+        padding: 10px 12px;
+        font-size: 14px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        box-sizing: border-box;
+        transition: border-color 0.3s ease;
+    }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+
+    .helper-text {
+        color: #666;
+        font-size: 12px;
+        margin-top: 5px;
+        line-height: 1.5;
+    }
 
     @@media (max-width: 1024px) {
         .content-grid {
@@ -710,6 +757,64 @@
             </div>
         </div>
 
+        <!-- Digital Signature Enable Checkbox -->
+        <div class="option-box" style="grid-column: 1 / -1;">
+            <label class="radio-item" style="background: white; border: 2px solid #e2e8f0;">
+                <input type="checkbox"
+                       id="enableDigitalSign"
+                       name="enableDigitalSign"
+                       value="true"
+                       onchange="toggleSignatureSection()"
+                       style="width: 20px; height: 20px; margin-right: 10px; cursor: pointer; accent-color: #667eea;" />
+                <input type="hidden" name="enableDigitalSign" value="false" />
+                <div class="item-content">
+                    <div class="item-title" style="font-size: 15px;">✍️ Enable Digital Signature</div>
+                    <div class="item-desc">Add digital signatures to generated documents</div>
+                </div>
+            </label>
+        </div>
+
+        <!-- Signature Configuration Section (Hidden by Default) -->
+        <div class="signature-section" id="signatureSection" style="grid-column: 1 / -1;">
+            <div class="signature-title">✍️ Digital Signature Configuration (Optional)</div>
+
+            <div class="option-box" style="border: none; background: transparent; padding: 0; margin-bottom: 20px;">
+                <!-- Signature Image Upload -->
+                <div style="margin-bottom: 20px;">
+                    <label class="option-label">🖼️ Signature Image File</label>
+                    <div style="position: relative; display: inline-block; width: 100%;">
+                        <input type="file"
+                               id="signatureImage"
+                               name="signatureImage"
+                               accept=".png,.jpg,.jpeg,.gif,.bmp"
+                               onchange="updateFileName(this, 'signatureImageName')"
+                               style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer;" />
+                    </div>
+                    <div class="helper-text">
+                        💡 Upload a custom signature image (PNG, JPG, etc.). If no image is uploaded, the default signature will be placed above the specified keywords in the document.
+                    </div>
+                </div>
+
+                <!-- Signature Keywords Input -->
+                <div style="margin-bottom: 20px;">
+                    <label class="option-label">🔍 Signature Placeholder Keywords</label>
+                    <input type="text"
+                           name="signatureKeywords"
+                           id="signatureKeywords"
+                           class="text-input"
+                           placeholder="e.g., Signature, AuthorizedSign"
+                           value="Sign, WITNESS, CompanySignature" />
+                    <div class="helper-text">
+                        💡 Enter keywords separated by commas to identify where signatures should be placed in your document.
+                    </div>
+                </div>
+
+                <div class="helper-text" style="background: #fff9e6; padding: 12px; border-left: 4px solid #ffc107; margin-top: 15px; margin-bottom: 0; border-radius: 4px;">
+                    📌 <strong>Note:</strong> Digital signatures will be automatically placed <strong>above</strong> the keywords you specify in your document.
+                </div>
+            </div>
+        </div>
+
         <!-- Options Section -->
         <div class="card options-card">
             <div class="card-title">
@@ -746,8 +851,8 @@
                         <label class="checkbox-item">
                             <input type="checkbox" id="multiPartDocument" name="multiPartDocument" />
                             <div class="item-content">
-                                <div class="item-title">📑 Multi-part Document</div>
-                                <div class="item-desc">Add cover page & table of contents</div>
+                                <div class="item-title">📑 Cover Page</div>
+                                <div class="item-desc">Add cover page</div>
                             </div>
                         </label>
                         <label class="checkbox-item">
@@ -840,6 +945,7 @@
     </div>
 </div>
 
+<!-- Remove the orphaned validation code and fix the signature section -->
 @section Scripts {
     <script>
         // Handle file uploads
@@ -880,7 +986,6 @@
                 section.classList.add('visible');
             } else {
                 section.classList.remove('visible');
-                // Clear uploaded files when unchecked
                 clearBookmarkDocuments();
             }
         }
@@ -892,20 +997,17 @@
             const list = document.getElementById('uploaded-files-list');
             const countBadge = document.getElementById('file-count-text');
 
-            // Clear previous list
             list.innerHTML = '';
 
             if (files && files.length > 0) {
                 container.style.display = 'block';
                 countBadge.textContent = `${files.length} ${files.length === 1 ? 'file' : 'files'} selected`;
 
-                // Display each uploaded file
                 Array.from(files).forEach((file, index) => {
                     const fileItem = document.createElement('div');
                     fileItem.className = 'uploaded-file-item';
                     fileItem.id = `file-item-${index}`;
 
-                    // Get file icon based on extension
                     const fileExt = file.name.split('.').pop().toLowerCase();
                     const fileIcons = {
                         'docx': '📄',
@@ -918,7 +1020,6 @@
                     };
                     const icon = fileIcons[fileExt] || '📎';
 
-                    // Format file size
                     const fileSize = (file.size / 1024).toFixed(2);
                     const sizeSuffix = fileSize > 1024 ? `${(fileSize / 1024).toFixed(2)} MB` : `${fileSize} KB`;
 
@@ -946,7 +1047,6 @@
             const dataTransfer = new DataTransfer();
             const files = input.files;
 
-            // Copy all files except the one at index
             Array.from(files).forEach((file, i) => {
                 if (i !== index) {
                     dataTransfer.items.add(file);
@@ -954,8 +1054,6 @@
             });
 
             input.files = dataTransfer.files;
-
-            // Re-render the list
             handleBookmarkDocumentUpload(input);
         }
 
@@ -970,7 +1068,7 @@
             list.innerHTML = '';
         }
 
-        // Toggle policy input visibility based on selection mode
+        // Toggle policy input visibility
         function togglePolicyInput() {
             const selectionMode = document.querySelector('input[name="selectionMode"]:checked').value;
             const policyInputSection = document.getElementById('policy-input-section');
@@ -989,7 +1087,36 @@
             }
         }
 
-        // Count and display policy numbers as user types
+        // Update signature image file name display
+        function updateFileName(input, spanId) {
+            const span = document.getElementById(spanId);
+            if (input.files && input.files.length > 0) {
+                span.textContent = input.files[0].name;
+            } else {
+                if (spanId === 'signatureImageName') {
+                    span.textContent = 'Signature.png';
+                }
+            }
+        }
+
+        // Toggle signature section visibility
+        function toggleSignatureSection() {
+            const checkbox = document.getElementById('enableDigitalSign');
+            const signatureSection = document.getElementById('signatureSection');
+
+            if (checkbox.checked) {
+                signatureSection.classList.add('visible');
+                signatureSection.style.display = 'block';
+            } else {
+                signatureSection.classList.remove('visible');
+                signatureSection.style.display = 'none';
+                document.getElementById('signatureImage').value = '';
+                document.getElementById('signatureImageName').textContent = 'Signature.png';
+                document.getElementById('signatureKeywords').value = 'Sign, WITNESS, AuthorizedSign';
+            }
+        }
+
+        // Count policy numbers
         document.getElementById('policyNumbers').addEventListener('input', function() {
             const text = this.value.trim();
             if (!text) {
@@ -1017,6 +1144,8 @@
             const policyNumbers = document.getElementById('policyNumbers').value.trim();
             const useBookmarkDocuments = document.getElementById('useBookmarkDocuments').checked;
             const bookmarkInput = document.getElementById('bookmarkDocumentsInput');
+            const enableDigitalSign = document.getElementById('enableDigitalSign').checked;
+            const signatureKeywords = document.getElementById('signatureKeywords').value.trim();
             const errorDiv = document.querySelector('.error-message');
 
             // Check if policy numbers are entered in specific mode
@@ -1037,37 +1166,32 @@
                 return false;
             }
 
+            // Check if signature keywords are provided when digital sign is enabled
+            if (enableDigitalSign && !signatureKeywords) {
+                e.preventDefault();
+                errorDiv.textContent = '⚠️ Please enter signature placeholder keywords or disable digital signature';
+                errorDiv.style.display = 'block';
+                document.getElementById('signatureSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+
             errorDiv.style.display = 'none';
         });
 
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            togglePolicyInput();
-        });
-
-        // Convert checkboxes to proper boolean values before form submission
+        // Convert checkboxes to proper boolean values
         document.querySelector('form').addEventListener('submit', function(e) {
             const multiPartDoc = document.getElementById('multiPartDocument');
             const separateFiles = document.getElementById('generateSeparateFiles');
             const useBookmarkDocs = document.getElementById('useBookmarkDocuments');
 
-            if (multiPartDoc.checked) {
-                multiPartDoc.value = 'true';
-            } else {
-                multiPartDoc.value = 'false';
-            }
+            multiPartDoc.value = multiPartDoc.checked ? 'true' : 'false';
+            separateFiles.value = separateFiles.checked ? 'true' : 'false';
+            useBookmarkDocs.value = useBookmarkDocs.checked ? 'true' : 'false';
+        });
 
-            if (separateFiles.checked) {
-                separateFiles.value = 'true';
-            } else {
-                separateFiles.value = 'false';
-            }
-
-            if (useBookmarkDocs.checked) {
-                useBookmarkDocs.value = 'true';
-            } else {
-                useBookmarkDocs.value = 'false';
-            }
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            togglePolicyInput();
         });
     </script>
 }

@@ -9,7 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="Syncfusion.DocIORenderer.Net.Core" Version="*" />
-    <PackageReference Include="Syncfusion.XlsIO.Net.Core" Version="33.1.49" />
+    <PackageReference Include="Syncfusion.SmartDataExtractor.Net.Core" Version="*" />
+    <PackageReference Include="Syncfusion.XlsIO.Net.Core" Version="*" />
   </ItemGroup>
 
 </Project>
