@@ -674,8 +674,8 @@
                 <div class="upload-zone" id="template-zone">
                     <div class="upload-icon">📋</div>
                     <div class="upload-text">Click to upload template</div>
-                    <div class="upload-hint">Word document (.docx, .doc, .rtf, .md, .html,.txt) with merge fields</div>
-                    @Html.TextBox("templateFile", null, new { type = "file", accept = ".docx,.rtf,.doc,.md,.html,.txt", onchange = "handleUpload(this, 'template')" })
+                    <div class="upload-hint">Word document (.docx, .doc, .rtf) with merge fields</div>
+                    @Html.TextBox("templateFile", null, new { type = "file", accept = ".docx,.rtf,.doc", onchange = "handleUpload(this, 'template')" })
                     <div class="file-badge" id="template-badge" style="display: none;">
                         ✓ <span id="template-name"></span>
                         <button type="button" onclick="clearFile('template')">×</button>

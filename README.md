@@ -73,12 +73,12 @@ https://localhost:5001
 ### Basic Workflow
 
 1. **Upload Template Document**
-   - Upload your Word template with merge fields
+   - Upload your Word template (.docx, .doc, .rtf) with merge fields
    - Drag & drop supported
    - Or use default template provided
 
 2. **Upload Data File**
-   - Upload Excel file containing policy data
+   - Upload Excel file (.xlsx, .xls, .csv, .xlts, .xlsm) containing policy data
    - Automatic policy number detection
    - Or use default data file
 

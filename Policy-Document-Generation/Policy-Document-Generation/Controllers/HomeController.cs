@@ -92,7 +92,7 @@ namespace Policy_Document_Generation.Controllers
                 bool isPdf = model.OutputFormat?.ToLower() == "pdf";
                 string fileExtension = isPdf ? "pdf" : "docx";
 
-                using (WordDocument document = new WordDocument(documentStream, FormatType.Docx))
+                using (WordDocument document = new WordDocument(documentStream, FormatType.Automatic))
                 {
                     // Execute mail merge once with all data
                     ExecuteMailMerge(document, dataSet);
@@ -1014,7 +1014,7 @@ namespace Policy_Document_Generation.Controllers
             if (file != null && file.Length > 0)
             {
                 string extension = Path.GetExtension(file.FileName).ToLower();
-                string[] supportedExtensions = { ".doc", ".docx", ".dot", ".dotx", ".dotm", ".docm", ".xml", ".rtf", ".html", ".md" };
+                string[] supportedExtensions = { ".doc", ".docx", ".dot", ".dotx", ".dotm", ".docm", ".xml", ".rtf" };
                 // Validate the file extension
                 if (supportedExtensions.Contains(extension))
                 {
